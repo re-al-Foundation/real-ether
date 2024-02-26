@@ -4,16 +4,19 @@ pragma solidity 0.8.21;
 import {ERC20} from "oz/token/ERC20/ERC20.sol";
 import {Minter} from "./Minter.sol";
 
-contract RealETH is ERC20 {
+error Real__ZeroAddress();
+error Real__NotMinter();
+
+contract Real is ERC20 {
     address public minter;
 
-    constructor(address _minter) ERC20("Real ETH", "rETH") {
-        require(_minter != address(0), "ZERO ADDRESS");
+    constructor(address _minter) ERC20("Real Ether", "REAL") {
+        if (_minter == address(0)) revert Real__ZeroAddress();
         minter = _minter;
     }
 
     modifier onlyMinter() {
-        require(msg.sender == minter, "!minter");
+        if (msg.sender != minter) revert Real__NotMinter();
         _;
     }
 

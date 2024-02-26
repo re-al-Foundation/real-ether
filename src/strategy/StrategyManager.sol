@@ -32,10 +32,6 @@ contract StrategyManager {
 
     mapping(address => uint256) public ratios;
 
-    event RatioUpdated(address strategy, uint256 ratio);
-    event StrategyAdded(address strategy);
-    event StrategyRemoved(address strategy);
-
     constructor(address payable _assetsVault, address[] memory _strategies, uint256[] memory _ratios) {
         if (_assetsVault == address(0)) revert StrategyManager__ZeroAddress();
 
@@ -195,7 +191,7 @@ contract StrategyManager {
     function _withdrawFromStrategy(address _strategy, uint256 _amount) internal {
         IStrategy(_strategy).withdraw(_amount);
     }
-  
+
     function _loadStrategies(address[] memory _strategies, uint256[] memory _ratios) internal {
         if (_strategies.length != _ratios.length) revert StrategyManager__InvalidLength();
 
@@ -211,8 +207,6 @@ contract StrategyManager {
             unchecked {
                 i++;
             }
-            emit StrategyAdded(_strategies[i]);
-            emit RatioUpdated(_strategies[i], _ratios[i]);
         }
 
         if (totalRatio > ONE_HUNDRED_PERCENT) revert StrategyManager__InvalidPercentage();
@@ -222,9 +216,7 @@ contract StrategyManager {
         // reset old strategies ratio
         uint256 oldLength = strategies.length();
         for (uint256 i; i < oldLength; i++) {
-            address _stragey = strategies.at(i);
-            ratios[_stragey] = 0;
-            emit RatioUpdated(_stragey, 0);
+            ratios[strategies.at(i)] = 0;
         }
 
         // load new strategies
@@ -245,8 +237,6 @@ contract StrategyManager {
         strategies.remove(_strategy);
 
         _repayToVault();
-
-        emit StrategyRemoved(_strategy);
     }
 
     function _couldDestroyStrategy(address _strategy) internal view returns (bool status) {
