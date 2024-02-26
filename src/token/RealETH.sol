@@ -25,7 +25,7 @@ contract RealETH is ERC20 {
         _burn(from, value);
     }
 
-    function tokenPrice() public returns (uint256 price) {
+    function tokenPrice() public view returns (uint256 price) {
         price = Minter(minter).getTokenPrice();
     }
 }

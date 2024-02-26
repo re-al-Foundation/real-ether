@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import {RealETH} from "./RealETH.sol";
-import {RealVault} from "./RealVault.sol";
+import {RealVault} from "../RealVault.sol";
 
 contract Minter {
     address public realETH;
@@ -31,7 +31,7 @@ contract Minter {
         vault = payable(_vault);
     }
 
-    function getTokenPrice() public returns (uint256 price) {
+    function getTokenPrice() public view returns (uint256 price) {
         price = RealVault(vault).currentSharePrice();
     }
 }
