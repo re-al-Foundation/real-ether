@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import {StrategyManager} from "./StrategyManager.sol";
+import {IStrategyManager} from "../interface/IStrategyManager.sol";
 
 error Strategy__ZeroAddress();
 error Strategy__NotManager();

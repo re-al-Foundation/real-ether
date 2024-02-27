@@ -10,6 +10,7 @@ interface IStrategyManager {
     function forceWithdraw(uint256 ethAmount) external returns (uint256 actualAmount);
     function setStrategies(address[] memory _strategies, uint256[] memory _ratios) external;
 
+    function assetsVault() external view returns (address vault);
     function getAllStrategiesValue() external view returns (uint256 amount);
     function getAllStrategyValidValue() external view returns (uint256 amount);
     function getAllStrategyPendingValue() external view returns (uint256 amount);

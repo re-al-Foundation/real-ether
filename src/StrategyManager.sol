@@ -4,11 +4,12 @@ pragma solidity 0.8.21;
 import {EnumerableSet} from "oz/utils/structs/EnumerableSet.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 
-import {IStrategy} from "../interface/IStrategy.sol";
-import {IAssetsVault} from "../interface/IAssetsVault.sol";
+import {IStrategy} from "./interface/IStrategy.sol";
+import {IAssetsVault} from "./interface/IAssetsVault.sol";
 
 error StrategyManager__ZeroAddress();
 error StrategyManager__InvalidLength();
+error StrategyManager__InvalidRatio();
 error StrategyManager__InvalidPercentage();
 error StrategyManager__NotVault();
 error StrategyManager__InvalidManager();
