@@ -20,6 +20,23 @@ interface IStETH is IERC20, IERC20Permit {
     function sharesOf(address _account) external view returns (uint256);
 
     /**
+     * @notice Moves `_sharesAmount` token shares from the caller's account to the `_recipient` account.
+     *
+     * @return amount of transferred tokens.
+     * Emits a `TransferShares` event.
+     * Emits a `Transfer` event.
+     *
+     * Requirements:
+     *
+     * - `_recipient` cannot be the zero address.
+     * - the caller must have at least `_sharesAmount` shares.
+     * - the contract must not be paused.
+     *
+     * @dev The `_sharesAmount` argument is the amount of shares, not tokens.
+     */
+    function transferShares(address _recipient, uint256 _sharesAmount) external returns (uint256);
+
+    /**
      * @return the amount of shares that corresponds to `_ethAmount` protocol-controlled Ether.
      */
     function getSharesByPooledEth(uint256 _pooledEthAmount) external view returns (uint256);

@@ -9,8 +9,8 @@ import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 
 import "./utils/Error.sol";
 
-import {Real} from "./token/Real.sol";
-import {Minter} from "./token/Minter.sol";
+import {IReal} from "./interface/IReal.sol";
+import {IMinter} from "./interface/IMinter.sol";
 import {IAssetsVault} from "./interface/IAssetsVault.sol";
 import {IStrategyManager} from "./interface/IStrategyManager.sol";
 
@@ -86,7 +86,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         proposal = _proposal;
         assetsVault = _assetsVault;
 
-        real = Minter(_minter).real();
+        real = IMinter(_minter).real();
 
         withdrawFeeRate = 0;
     }
@@ -111,8 +111,8 @@ contract RealVault is ReentrancyGuard, Ownable {
 
         if (_latestRoundID == 0) revert RealVault__WithdrawInstantly();
 
-        Real realToken = Real(real);
-        Minter realEthMinter = Minter(minter);
+        IReal realToken = IReal(real);
+        IMinter realEthMinter = IMinter(minter);
 
         require(realToken.balanceOf(msg.sender) >= _shares, "exceed balance");
 
@@ -175,7 +175,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         if (_amount == 0 || _shares == 0) revert RealVault__InvalidAmount();
 
         IAssetsVault aVault = IAssetsVault(assetsVault);
-        Minter realEthMinter = Minter(minter);
+        IMinter realEthMinter = IMinter(minter);
 
         uint256 _latestRoundID = latestRoundID;
         (uint256 idleAmount,) = getVaultAvailableAmount();
@@ -290,7 +290,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     function migrateVault(address _vault) external onlyProposal {
-        Minter(minter).setNewVault(_vault);
+        IMinter(minter).setNewVault(_vault);
         IAssetsVault(assetsVault).setNewVault(_vault);
         IStrategyManager(strategyManager).setNewVault(_vault);
     }
@@ -336,7 +336,7 @@ contract RealVault is ReentrancyGuard, Ownable {
 
         mintAmount = previewDeposit(assets); // shares amount to be minted
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
-        Minter(minter).mint(receiver, mintAmount);
+        IMinter(minter).mint(receiver, mintAmount);
 
         emit Deposit(caller, receiver, assets, mintAmount);
     }
@@ -381,7 +381,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     function currentSharePrice() public view returns (uint256 price) {
-        Real realToken = Real(real);
+        IReal realToken = IReal(real);
         uint256 totalReal = realToken.totalSupply();
         if (latestRoundID == 0 || totalReal == 0 || totalReal == withdrawingSharesInPast) {
             return MULTIPLIER;

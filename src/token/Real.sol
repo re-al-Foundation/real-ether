@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import {ERC20} from "oz/token/ERC20/ERC20.sol";
-import {Minter} from "./Minter.sol";
+import {IMinter} from "../interface/IMinter.sol";
 
 error Real__ZeroAddress();
 error Real__NotMinter();
@@ -29,6 +29,8 @@ contract Real is ERC20 {
     }
 
     function tokenPrice() public view returns (uint256 price) {
-        price = Minter(minter).getTokenPrice();
+        price = IMinter(minter).getTokenPrice();
     }
+
+    function updatePriceOnL2() external payable virtual returns (uint256 price) {}
 }

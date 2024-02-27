@@ -5,6 +5,7 @@ import {Strategy} from "./Strategy.sol";
 import {IStETH} from "../interface/IStETH.sol";
 import {IWithdrawalQueueERC721} from "../interface/IWithdrawalQueueERC721.sol";
 import {IStrategyManager} from "../interface/IStrategyManager.sol";
+import {ISwapManager} from "../interface/ISwapManager.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 
 error Strategy__ZeroAmount();
@@ -13,28 +14,34 @@ error Strategy__LidoDeposit();
 error Strategy__LidoRequestWithdraw();
 
 contract LidoStEthStrategy is Strategy {
-    IStETH public stETHContract;
+    IStETH public STETH;
     IWithdrawalQueueERC721 public stETHWithdrawalQueue;
+    address public swapManager;
 
-    constructor(address _stETHAdress, address _stETHWithdrawal, address payable _manager, string memory _name)
-        Strategy(_manager, _name)
-    {
-        stETHContract = IStETH(_stETHAdress);
+    constructor(
+        address _stETHAdress,
+        address _stETHWithdrawal,
+        address _swapManager,
+        address payable _manager,
+        string memory _name
+    ) Strategy(_manager, _name) {
+        STETH = IStETH(_stETHAdress);
         stETHWithdrawalQueue = IWithdrawalQueueERC721(_stETHWithdrawal);
+        swapManager = _swapManager;
     }
 
     function deposit() public payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
-        uint256 shares = stETHContract.submit{value: msg.value}(address(0));
+        uint256 shares = STETH.submit{value: msg.value}(address(0));
         if (shares == 0) revert Strategy__LidoDeposit();
     }
 
     function withdraw(uint256 _ethAmount) public override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
-        if (stETHContract.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
+        if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
 
         //approve steth for WithdrawalQueueERC721
-        stETHContract.approve(address(stETHWithdrawalQueue), _ethAmount);
+        STETH.approve(address(stETHWithdrawalQueue), _ethAmount);
 
         uint256[] memory requestedAmounts = new uint256[](1);
         requestedAmounts[0] = _ethAmount;
@@ -108,6 +115,15 @@ contract LidoStEthStrategy is Strategy {
         return claimableRequestIds;
     }
 
+    function clear() public override onlyManager returns (uint256 amount) {
+        uint256 balance = STETH.balanceOf(address(this));
+        TransferHelper.safeApprove(address(STETH), swapManager, balance);
+        amount = ISwapManager(swapManager).swap(address(STETH), balance);
+        uint256 share = STETH.sharesOf(address(this));
+        STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+        TransferHelper.safeTransferETH(manager, address(this).balance);
+    }
+
     function checkPendingAssets()
         public
         view
@@ -176,7 +192,7 @@ contract LidoStEthStrategy is Strategy {
     }
 
     function getInvestedValue() public view override returns (uint256 value) {
-        value = stETHContract.balanceOf(address(this));
+        value = STETH.balanceOf(address(this));
     }
 
     function getPendingValue() public view override returns (uint256 value) {

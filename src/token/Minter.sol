@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import {Real} from "./Real.sol";
-import {RealVault} from "../RealVault.sol";
+import {IReal} from "../interface/IReal.sol";
+import {IRealVault} from "../interface/IRealVault.sol";
 
 error Minter__ZeroAddress();
 error Minter__NotVault();
@@ -23,11 +23,11 @@ contract Minter {
     }
 
     function mint(address _to, uint256 _amount) external onlyVault {
-        Real(real).mint(_to, _amount);
+        IReal(real).mint(_to, _amount);
     }
 
     function burn(address _from, uint256 _amount) external onlyVault {
-        Real(real).burn(_from, _amount);
+        IReal(real).burn(_from, _amount);
     }
 
     function setNewVault(address _vault) external onlyVault {
@@ -35,6 +35,6 @@ contract Minter {
     }
 
     function getTokenPrice() public view returns (uint256 price) {
-        price = RealVault(vault).currentSharePrice();
+        price = IRealVault(vault).currentSharePrice();
     }
 }
