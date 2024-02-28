@@ -3,8 +3,9 @@ pragma solidity 0.8.21;
 
 import {Strategy} from "../strategy/Strategy.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-
 import {IStrategyManager} from "../interface/IStrategyManager.sol";
+
+import {Test, console2} from "forge-std/Test.sol";
 
 error Strategy__ZeroAmount();
 error Strategy__InsufficientBalance();
@@ -37,7 +38,7 @@ contract MockStrategy is Strategy {
     }
 
     function getBalance() public view returns (uint256 amount) {
-        amount = lockedReserve;
+        amount = address(this).balance;
     }
 
     function getAllValue() public view override returns (uint256 value) {
@@ -45,7 +46,7 @@ contract MockStrategy is Strategy {
     }
 
     function getInvestedValue() public view override returns (uint256 value) {
-        value = lockedReserve;
+        value = address(this).balance;
     }
 
     function getPendingValue() public pure override returns (uint256 value) {
@@ -59,4 +60,6 @@ contract MockStrategy is Strategy {
     function getClaimableAndPendingValue() public pure returns (uint256 value) {
         value = 0;
     }
+
+    receive() external payable {}
 }

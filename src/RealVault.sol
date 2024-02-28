@@ -73,14 +73,23 @@ contract RealVault is ReentrancyGuard, Ownable {
     event SetFeeRecipient(address oldAddr, address newAddr);
     event SetRebaseInterval(uint256 interval);
 
-    constructor(address _intialOwner, address _minter, address payable _assetsVault, address _proposal)
-        Ownable(_intialOwner)
-    {
-        require(_minter != address(0) && _proposal != address(0) && _assetsVault != address(0), "ZERO ADDRESS");
+    constructor(
+        address _intialOwner,
+        address _minter,
+        address payable _assetsVault,
+        address payable _strategyManager,
+        address _proposal
+    ) Ownable(_intialOwner) {
+        require(
+            _minter != address(0) && _proposal != address(0) && _assetsVault != address(0)
+                && _strategyManager != address(0),
+            "ZERO ADDRESS"
+        );
 
         minter = _minter;
         proposal = _proposal;
         assetsVault = _assetsVault;
+        strategyManager = _strategyManager;
 
         real = IMinter(_minter).real();
 
@@ -168,7 +177,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         nonReentrant
         returns (uint256 actualWithdrawn)
     {
-        if (_amount == 0 || _shares == 0) revert RealVault__InvalidAmount();
+        if (_amount == 0 && _shares == 0) revert RealVault__InvalidAmount();
 
         IAssetsVault aVault = IAssetsVault(assetsVault);
         IMinter realEthMinter = IMinter(minter);
@@ -377,6 +386,8 @@ contract RealVault is ReentrancyGuard, Ownable {
         return (assets * MULTIPLIER) / sharePrice;
     }
 
+    /// @dev send a certain amount of shares to the blackhole address when the protocol accepts
+    /// deposits for the first time. https://github.com/OpenZeppelin/openzeppelin-contracts/issues/3706
     function currentSharePrice() public view returns (uint256 price) {
         IReal realToken = IReal(real);
         uint256 totalReal = realToken.totalSupply();

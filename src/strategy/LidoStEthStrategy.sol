@@ -30,6 +30,15 @@ contract LidoStEthStrategy is Strategy {
         swapManager = _swapManager;
     }
 
+    function _instantWithdraw(uint256 _amount) internal returns (uint256 actualAmount) {
+        // uint256 balance = STETH.balanceOf(address(this));
+        TransferHelper.safeApprove(address(STETH), swapManager, _amount);
+        actualAmount = ISwapManager(swapManager).swap(address(STETH), _amount);
+        uint256 share = STETH.sharesOf(address(this));
+        STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+        TransferHelper.safeTransferETH(manager, address(this).balance);
+    }
+
     function deposit() public payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
         uint256 shares = STETH.submit{value: msg.value}(address(0));
@@ -115,13 +124,13 @@ contract LidoStEthStrategy is Strategy {
         return claimableRequestIds;
     }
 
+    function instantWithdraw(uint256 _amount) public override onlyManager returns (uint256 actualAmount) {
+        actualAmount = _instantWithdraw(_amount);
+    }
+
     function clear() public override onlyManager returns (uint256 amount) {
         uint256 balance = STETH.balanceOf(address(this));
-        TransferHelper.safeApprove(address(STETH), swapManager, balance);
-        amount = ISwapManager(swapManager).swap(address(STETH), balance);
-        uint256 share = STETH.sharesOf(address(this));
-        STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
-        TransferHelper.safeTransferETH(manager, address(this).balance);
+        amount = _instantWithdraw(balance);
     }
 
     function checkPendingAssets()

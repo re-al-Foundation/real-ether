@@ -8,12 +8,15 @@ import {IStrategy} from "./interface/IStrategy.sol";
 import {IAssetsVault} from "./interface/IAssetsVault.sol";
 
 error StrategyManager__ZeroAddress();
+error StrategyManager__ZeroStrategy();
 error StrategyManager__InvalidLength();
 error StrategyManager__InvalidRatio();
 error StrategyManager__InvalidPercentage();
 error StrategyManager__NotVault();
 error StrategyManager__InvalidManager();
+error StrategyManager__MinAllocation(uint256 minAllocation);
 error StrategyManager__StillActive(address strategy);
+error StrategyManager__AlreadyExist(address strategy);
 
 contract StrategyManager {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -24,7 +27,8 @@ contract StrategyManager {
         uint256 amount;
     }
 
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
+    uint256 internal constant MINIMUM_ALLOCATION = 10_000; // 1%
+    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000; // 100%
 
     address public realVault;
     address payable public immutable assetsVault;
@@ -33,10 +37,17 @@ contract StrategyManager {
 
     mapping(address => uint256) public ratios;
 
-    constructor(address payable _assetsVault, address[] memory _strategies, uint256[] memory _ratios) {
+    constructor(
+        address _realVault,
+        address payable _assetsVault,
+        address[] memory _strategies,
+        uint256[] memory _ratios
+    ) {
         if (_assetsVault == address(0)) revert StrategyManager__ZeroAddress();
 
         uint256 length = _strategies.length;
+        if (length == 0) revert StrategyManager__ZeroStrategy();
+
         for (uint256 i; i < length;) {
             if (_strategies[i] == address(0)) revert StrategyManager__ZeroAddress();
             unchecked {
@@ -44,7 +55,7 @@ contract StrategyManager {
             }
         }
 
-        realVault = msg.sender;
+        realVault = _realVault;
         assetsVault = _assetsVault;
 
         _loadStrategies(_strategies, _ratios);
@@ -66,7 +77,7 @@ contract StrategyManager {
     }
 
     function addStrategy(address _strategy) external onlyVault {
-        require(!strategies.contains(_strategy), "already exist");
+        if (strategies.contains(_strategy)) revert StrategyManager__AlreadyExist(_strategy);
         strategies.add(_strategy);
     }
 
@@ -107,6 +118,7 @@ contract StrategyManager {
         if (_in != 0) {
             IAssetsVault(assetsVault).withdraw(address(this), _in);
         }
+
         uint256 total = getAllStrategyValidValue();
         if (total < _out) {
             total = 0;
@@ -115,9 +127,11 @@ contract StrategyManager {
         }
 
         uint256 length = strategies.length();
+
         StrategySnapshot[] memory snapshots = new StrategySnapshot[](length);
         uint256 head;
         uint256 tail = length - 1;
+
         for (uint256 i; i < length; i++) {
             address strategy = strategies.at(i);
             if (ratios[strategy] == 0) {
@@ -200,6 +214,7 @@ contract StrategyManager {
         uint256 length = _strategies.length;
         for (uint256 i; i < length;) {
             if (IStrategy(_strategies[i]).manager() != address(this)) revert StrategyManager__InvalidManager();
+            // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
             ratios[_strategies[i]] = _ratios[i];
