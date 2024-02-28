@@ -17,7 +17,11 @@ error RealVault__InvalidAmount();
 error RealVault__ZeroAddress();
 error RealVault__WithdrawInstantly();
 error RealVault__NoRequestFound();
+error RealVault__NotProposal();
+error RealVault__ExceedBalance();
+error RealVault__WaitInQueue();
 error RealVault__ExceedRequestedAmount(uint256 requestedAmount, uint256 actualAmount);
+error RealVault__ExceedWithdrawAmount();
 error RealVault__ExceedMaxFeeRate(uint256 _feeRate);
 error RealVault__MinimumRebaseInterval(uint256 minInterval);
 
@@ -80,11 +84,10 @@ contract RealVault is ReentrancyGuard, Ownable {
         address payable _strategyManager,
         address _proposal
     ) Ownable(_intialOwner) {
-        require(
-            _minter != address(0) && _proposal != address(0) && _assetsVault != address(0)
-                && _strategyManager != address(0),
-            "ZERO ADDRESS"
-        );
+        if (
+            _minter == address(0) || _proposal == address(0) || _assetsVault == address(0)
+                || _strategyManager == address(0)
+        ) revert RealVault__ZeroAddress();
 
         minter = _minter;
         proposal = _proposal;
@@ -97,7 +100,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     modifier onlyProposal() {
-        require(proposal == msg.sender, "not proposal");
+        if (proposal != msg.sender) revert RealVault__NotProposal();
         _;
     }
 
@@ -119,7 +122,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         IReal realToken = IReal(real);
         IMinter realEthMinter = IMinter(minter);
 
-        require(realToken.balanceOf(msg.sender) >= _shares, "exceed balance");
+        if (realToken.balanceOf(msg.sender) < _shares) revert RealVault__ExceedBalance();
 
         TransferHelper.safeTransferFrom(real, msg.sender, address(this), _shares);
 
@@ -201,7 +204,7 @@ contract RealVault is ReentrancyGuard, Ownable {
                 receipt.withdrawRound = 0;
             }
 
-            require(receipt.withdrawableAmount >= _amount, "exceed withdrawable");
+            if (receipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
 
             receipt.withdrawableAmount = receipt.withdrawableAmount - _amount;
             withdrawableAmountInPast = withdrawableAmountInPast - _amount;
@@ -243,7 +246,7 @@ contract RealVault is ReentrancyGuard, Ownable {
             }
         }
 
-        require(aVault.getBalance() >= actualWithdrawn, "still need wait");
+        if (aVault.getBalance() < actualWithdrawn) revert RealVault__WaitInQueue();
 
         uint256 withFee;
         if (withdrawFeeRate != 0) {
@@ -358,7 +361,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     function setFeeRecipient(address _feeRecipient) external onlyOwner {
-        require(_feeRecipient != address(0), "zero address");
+        if (_feeRecipient == address(0)) revert RealVault__ZeroAddress();
 
         emit SetFeeRecipient(feeRecipient, _feeRecipient);
 

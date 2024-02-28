@@ -9,6 +9,7 @@ import {RealVault} from "src/RealVault.sol";
 import {StrategyManager} from "src/StrategyManager.sol";
 import {AssetsVault} from "src/AssetsVault.sol";
 import {MockStrategy} from "src/mock/MockStrategy.sol";
+import {MockPendingStrategy} from "src/mock/MockPendingStrategy.sol";
 
 contract VaultTest is Test {
     uint256 PRECISION = 10 ** 18;
@@ -67,76 +68,76 @@ contract VaultTest is Test {
         epoch0 = block.timestamp;
     }
 
-    // function test_assetVaultdeposit() public {
-    //     deal(address(realVault), 1 ether);
-    //     vm.startPrank(address(realVault));
-    //     assetsVault.deposit{value: 1 ether}();
-    //     vm.stopPrank();
-    //     assertEq(address(assetsVault).balance, 1 ether);
-    // }
+    function test_assetVaultdeposit() public {
+        deal(address(realVault), 1 ether);
+        vm.startPrank(address(realVault));
+        assetsVault.deposit{value: 1 ether}();
+        vm.stopPrank();
+        assertEq(address(assetsVault).balance, 1 ether);
+    }
 
-    // function test_deposit() public {
+    function test_deposit() public {
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+        realVault.deposit{value: 1 ether}();
+        vm.stopPrank();
+
+        assertEq(address(realVault).balance, 0 ether);
+        assertEq(address(assetsVault).balance, 1 ether);
+        assertEq(real.balanceOf(user.addr), 1 ether);
+    }
+
+    // function test_requestWithdrawFail() public {
     //     deal(user.addr, 10 ether);
     //     vm.startPrank(user.addr);
-    //     realVault.deposit{value: 1 ether}();
-    //     vm.stopPrank();
-
-    //     assertEq(address(realVault).balance, 0 ether);
-    //     assertEq(address(assetsVault).balance, 1 ether);
-    //     assertEq(real.balanceOf(user.addr), 1 ether);
-    // }
-
-    // // function test_requestWithdrawFail() public {
-    // //     deal(user.addr, 10 ether);
-    // //     vm.startPrank(user.addr);
-
-    // //     // Deposit in Round#0
-    // //     realVault.deposit{value: 1 ether}();
-
-    // //     // Request Withraw in Round#0
-    // //     // vm.expectRevert(bytes("RealVault__WithdrawInstantly()"));
-    // //     // vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__WithdrawInstantly.selector));
-    // //     // vm.expectRevert(abi.encodeWithSignature("Error(string)", "RealVault__WithdrawInstantly()"));
-    // //     realVault.requestWithdraw(real.balanceOf(user.addr));
-    // //     vm.stopPrank();
-    // // }
-
-    // function test_round0InstantWithdraw() public {
-    //     deal(user.addr, 2 ether);
-    //     vm.startPrank(user.addr);
 
     //     // Deposit in Round#0
     //     realVault.deposit{value: 1 ether}();
 
-    //     assertEq(address(assetsVault).balance, 1 ether);
-    //     assertEq(user.addr.balance, 1 ether);
-
-    //     // Instant withdraw in Round#0
-    //     realVault.instantWithdraw(0, real.balanceOf(user.addr));
+    //     // Request Withraw in Round#0
+    //     // vm.expectRevert(bytes("RealVault__WithdrawInstantly()"));
+    //     // vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__WithdrawInstantly.selector));
+    //     // vm.expectRevert(abi.encodeWithSignature("Error(string)", "RealVault__WithdrawInstantly()"));
+    //     realVault.requestWithdraw(real.balanceOf(user.addr));
     //     vm.stopPrank();
-
-    //     assertEq(real.balanceOf(user.addr), 0 ether);
-    //     assertEq(address(assetsVault).balance, 0 ether);
-    //     assertEq(user.addr.balance, 2 ether);
     // }
 
-    // function test_round0InstantWithdraw() public {
-    //     deal(user.addr, 2 ether);
-    //     vm.startPrank(user.addr);
+    function test_round0InstantWithdraw() public {
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
 
-    //     // Deposit in Round#0
-    //     realVault.deposit{value: 1 ether}();
+        // Deposit in Round#0
+        realVault.deposit{value: 1 ether}();
 
-    //     // increment the time to the next round
-    //     vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        assertEq(address(assetsVault).balance, 1 ether);
+        assertEq(user.addr.balance, 1 ether);
 
-    //     // roll epoch to next round
-    //     realVault.rollToNextRound();
-    //     vm.stopPrank();
+        // Instant withdraw in Round#0
+        realVault.instantWithdraw(0, real.balanceOf(user.addr));
+        vm.stopPrank();
 
-    //     assertEq(address(assetsVault).balance, 0 ether);
-    //     assertEq(strategyManager.getAllStrategiesValue(), 1 ether);
-    // }
+        assertEq(real.balanceOf(user.addr), 0 ether);
+        assertEq(address(assetsVault).balance, 0 ether);
+        assertEq(user.addr.balance, 2 ether);
+    }
+
+    function test_rollToNextRound() public {
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+
+        // Deposit in Round#0
+        realVault.deposit{value: 1 ether}();
+
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+
+        // roll epoch to next round
+        realVault.rollToNextRound();
+        vm.stopPrank();
+
+        assertEq(address(assetsVault).balance, 0 ether);
+        assertEq(strategyManager.getAllStrategiesValue(), 1 ether);
+    }
 
     function test_SharePriceIncrement() public {
         deal(user.addr, 2 ether);
