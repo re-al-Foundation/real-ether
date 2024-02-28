@@ -6,14 +6,10 @@ pragma solidity 0.8.21;
 import {ReentrancyGuard} from "oz/utils/ReentrancyGuard.sol";
 import {Ownable} from "oz/access/Ownable.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-
-import "./utils/Error.sol";
-
 import {IReal} from "./interface/IReal.sol";
 import {IMinter} from "./interface/IMinter.sol";
 import {IAssetsVault} from "./interface/IAssetsVault.sol";
 import {IStrategyManager} from "./interface/IStrategyManager.sol";
-
 import {ShareMath} from "./libraries/ShareMath.sol";
 
 error RealVault__NotReady();
@@ -335,6 +331,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         if (assets == 0) revert RealVault__InvalidAmount();
 
         mintAmount = previewDeposit(assets); // shares amount to be minted
+
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
         IMinter(minter).mint(receiver, mintAmount);
 

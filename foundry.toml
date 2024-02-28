@@ -5,6 +5,7 @@ libs = ["lib"]
 
 remappings = [
   "src/=src/",
+  "forge-std/=lib/forge-std/src/",
   "oz/=lib/openzeppelin-contracts/contracts/",
   "v3-periphery/=lib/v3-periphery/contracts/"
 ]
