@@ -99,4 +99,13 @@ interface IWithdrawalQueueERC721 is IERC721 {
         external;
 
     function finaliseRequest(uint256 _requestId) external;
+
+    function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
+
+    function getLastRequestId() external view returns (uint256);
+
+    function prefinalize(uint256[] calldata _batches, uint256 _maxShareRate)
+        external
+        view
+        returns (uint256 ethToLock, uint256 sharesToBurn);
 }

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity =0.8.21;
 
 // https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/extensions/ERC4626.sol
 
 import {ReentrancyGuard} from "oz/utils/ReentrancyGuard.sol";
 import {Ownable} from "oz/access/Ownable.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-import {IReal} from "./interface/IReal.sol";
-import {IMinter} from "./interface/IMinter.sol";
-import {IAssetsVault} from "./interface/IAssetsVault.sol";
-import {IStrategyManager} from "./interface/IStrategyManager.sol";
+import {IReal} from "./interfaces/IReal.sol";
+import {IMinter} from "./interfaces/IMinter.sol";
+import {IAssetsVault} from "./interfaces/IAssetsVault.sol";
+import {IStrategyManager} from "./interfaces/IStrategyManager.sol";
 import {ShareMath} from "./libraries/ShareMath.sol";
 
 error RealVault__NotReady();
@@ -25,10 +25,23 @@ error RealVault__ExceedWithdrawAmount();
 error RealVault__ExceedMaxFeeRate(uint256 _feeRate);
 error RealVault__MinimumRebaseInterval(uint256 minInterval);
 
+/**
+ * @title Real Ether Vault (reETH)
+ * @author Mavvverick
+ * @notice The Real Vault (reETH) is responsible for managing deposit, withdrawal, and settlement processes
+ * using ERC4626 standard. Users can deposit ETH into the Vault, where it is held securely until settlement,
+ * thereby participating in the yield generation process and receiving rewards as reETH token holders.
+ * Upon settlement, funds are deployed to the underlying strategy pool for yield generation.The Vault ensures
+ * the security of deposited assets and facilitates seamless interactions within the Real Network ecosystem.
+ * Users can interact with the Vault to deposit, withdraw, and settle RealETH tokens, contributing to the
+ * stability and growth of the platform. Additionally, the Vault's architecture provides flexibility for
+ * future yield staking /re-staking strategy and optimizations, ensuring its continued effectiveness in
+ * managing assets and supporting the Real Network infrastructure.
+ */
 contract RealVault is ReentrancyGuard, Ownable {
     uint256 internal constant MULTIPLIER = 10 ** 18;
     uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
-    uint256 internal constant MAXMIUM_FEE_RATE = ONE_HUNDRED_PERCENT / 20; // 5%
+    uint256 internal constant MAXMIUM_FEE_RATE = ONE_HUNDRED_PERCENT / 100; // 1%
     uint256 internal constant MINIMUM_REBASE_INTERVAL = 60 * 60; // 1hour
 
     uint256 public rebaseTimeInterval = 24 * 60 * 60; // 1 day
@@ -68,15 +81,23 @@ contract RealVault is ReentrancyGuard, Ownable {
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
     event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
     event RollToNextRound(uint256 round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
+    event VaultMigrated(address oldVault, address newVault);
     event StragetyAdded(address strategy);
     event StragetyDestroyed(address strategy);
     event StragetyCleared(address strategy);
-    event PortfolioConfigUpdated(address[] strategies, uint256[] ratios);
+    event InvestmentPortfolioUpdated(address[] strategies, uint256[] ratios);
     event FeeCharged(address indexed account, uint256 amount);
     event SetWithdrawFeeRate(uint256 oldRate, uint256 newRate);
     event SetFeeRecipient(address oldAddr, address newAddr);
     event SetRebaseInterval(uint256 interval);
 
+    /**
+     * @param _intialOwner Address of the initial owner of the contract.
+     * @param _minter Address of the minter contract.
+     * @param _assetsVault Address of the assets vault contract.
+     * @param _strategyManager Address of the strategy manager contract.
+     * @param _proposal Address of the proposal contract.
+     */
     constructor(
         address _intialOwner,
         address _minter,
@@ -95,23 +116,39 @@ contract RealVault is ReentrancyGuard, Ownable {
         strategyManager = _strategyManager;
 
         real = IMinter(_minter).real();
-
+        rebaseTime = block.timestamp;
         withdrawFeeRate = 0;
     }
 
+    /**
+     * @dev Modifier to restrict access to only the proposal contract.
+     */
     modifier onlyProposal() {
         if (proposal != msg.sender) revert RealVault__NotProposal();
         _;
     }
 
+    /**
+     * @dev Deposit assets into the RealVault.
+     * @return mintAmount The amount of shares minted.
+     */
     function deposit() external payable nonReentrant returns (uint256 mintAmount) {
         mintAmount = _depositFor(msg.sender, msg.sender, msg.value);
     }
 
+    /**
+     * @dev Deposit assets into the RealVault on behalf of another address.
+     * @param receiver Address to receive the minted shares.
+     * @return mintAmount The amount of shares minted.
+     */
     function depositFor(address receiver) external payable nonReentrant returns (uint256 mintAmount) {
         mintAmount = _depositFor(msg.sender, receiver, msg.value);
     }
 
+    /**
+     * @dev Initiate a withdrawal request for a specified number of shares.
+     * @param _shares Number of shares to withdraw.
+     */
     function requestWithdraw(uint256 _shares) external nonReentrant {
         if (_shares == 0) revert RealVault__InvalidAmount();
 
@@ -151,6 +188,10 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit InitiateWithdraw(msg.sender, _shares, _latestRoundID);
     }
 
+    /**
+     * @dev Cancel a pending withdrawal request.
+     * @param _shares Number of shares to cancel the withdrawal for.
+     */
     function cancelWithdraw(uint256 _shares) external nonReentrant {
         if (_shares == 0) revert RealVault__InvalidAmount();
 
@@ -174,6 +215,12 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit CancelWithdraw(msg.sender, _shares, _latestRoundID);
     }
 
+    /**
+     * @dev Withdraw assets instantly or after a delay, depending on availability.
+     * @param _amount Amount of assets to withdraw.
+     * @param _shares Number of shares to withdraw.
+     * @return actualWithdrawn The actual amount of assets withdrawn.
+     */
     function instantWithdraw(uint256 _amount, uint256 _shares)
         external
         payable
@@ -238,6 +285,8 @@ contract RealVault is ReentrancyGuard, Ownable {
                 ethAmount = ethAmount - idleAmount;
 
                 IStrategyManager manager = IStrategyManager(strategyManager);
+                // if strategy sells the LSD token on the decentralized exchange (DEX),
+                // deducting swap fees from the requested amount.
                 uint256 actualAmount = manager.forceWithdraw(ethAmount);
 
                 actualWithdrawn = actualWithdrawn + actualAmount;
@@ -258,6 +307,9 @@ contract RealVault is ReentrancyGuard, Ownable {
         aVault.withdraw(msg.sender, actualWithdrawn - withFee);
     }
 
+    /**
+     * @dev Transition to the next round, managing vault balances and share prices.
+     */
     function rollToNextRound() external {
         if (block.timestamp < rebaseTime + rebaseTimeInterval) revert RealVault__NotReady();
 
@@ -297,12 +349,21 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit RollToNextRound(latestRoundID, vaultIn, vaultOut, newSharePrice);
     }
 
+    /**
+     * @dev Migrate the vault to a new contract.
+     * @param _vault Address of the new vault.
+     */
     function migrateVault(address _vault) external onlyProposal {
         IMinter(minter).setNewVault(_vault);
         IAssetsVault(assetsVault).setNewVault(_vault);
         IStrategyManager(strategyManager).setNewVault(_vault);
+        emit VaultMigrated(address(this), _vault);
     }
 
+    /**
+     * @dev Add a new strategy to the strategy manager.
+     * @param _strategy Address of the new strategy.
+     */
     function addStrategy(address _strategy) external onlyProposal {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
@@ -310,6 +371,11 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit StragetyAdded(_strategy);
     }
 
+    /**
+     * @dev Destroy a strategy from the strategy manager.
+     * Funds must be returned to the asset valut from the strategy before destroyin the strategy.
+     * @param _strategy Address of the strategy to destroy.
+     */
     function destroyStrategy(address _strategy) external onlyOwner {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
@@ -317,6 +383,11 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit StragetyDestroyed(_strategy);
     }
 
+    /**
+     * @dev Clear a strategy from the vault.
+     * Funds will be returned to the asset valut from the strategy
+     * @param _strategy Address of the strategy to clear.
+     */
     function clearStrategy(address _strategy) external onlyOwner {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
@@ -324,14 +395,25 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit StragetyCleared(_strategy);
     }
 
-    function updatePortfolioConfig(address[] memory _strategies, uint256[] memory _ratios) external onlyProposal {
+    /**
+     * @dev Update the investment portfolio of the vault.
+     * Set the strategy and potfolio allocation ratio in the manager.
+     * Previous strategy ratios will set to zero before applying the new allocation ratio.
+     * @param _strategies Array of addresses representing the new strategies.
+     * @param _ratios Array of ratios corresponding to the strategies.
+     */
+    function updateInvestmentPortfolio(address[] memory _strategies, uint256[] memory _ratios) external onlyProposal {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
         manager.setStrategies(_strategies, _ratios);
 
-        emit PortfolioConfigUpdated(_strategies, _ratios);
+        emit InvestmentPortfolioUpdated(_strategies, _ratios);
     }
 
+    /**
+     * @dev Update the address of the proposal contract or multisig.
+     * @param _proposal Address of the new proposal contract or multisig.
+     */
     function updateProposal(address _proposal) external onlyProposal {
         if (_proposal == address(0)) revert RealVault__ZeroAddress();
         proposal = _proposal;
@@ -352,6 +434,12 @@ contract RealVault is ReentrancyGuard, Ownable {
 
     // [SETTER FUNCTIONS]
 
+    /**
+     * @dev Sets the withdrawal fee rate.
+     * @param _withdrawFeeRate The new withdrawal fee rate.
+     * Requirements:
+     * - The new fee rate must not exceed the maximum fee rate.
+     */
     function setWithdrawFeeRate(uint256 _withdrawFeeRate) external onlyOwner {
         if (_withdrawFeeRate > MAXMIUM_FEE_RATE) revert RealVault__ExceedMaxFeeRate(_withdrawFeeRate);
 
@@ -360,6 +448,12 @@ contract RealVault is ReentrancyGuard, Ownable {
         withdrawFeeRate = _withdrawFeeRate;
     }
 
+    /**
+     * @dev Sets the fee recipient address.
+     * @param _feeRecipient The new fee recipient address.
+     * Requirements:
+     * - The new fee recipient address must not be the zero address.
+     */
     function setFeeRecipient(address _feeRecipient) external onlyOwner {
         if (_feeRecipient == address(0)) revert RealVault__ZeroAddress();
 
@@ -368,6 +462,12 @@ contract RealVault is ReentrancyGuard, Ownable {
         feeRecipient = _feeRecipient;
     }
 
+    /**
+     * @dev Sets the rebase interval.
+     * @param _interval The new rebase interval.
+     * Requirements:
+     * - The new interval must not be less than the minimum rebase interval.
+     */
     function setRebaseInterval(uint256 _interval) external onlyOwner {
         if (_interval > MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
         rebaseTimeInterval = _interval;
@@ -376,6 +476,11 @@ contract RealVault is ReentrancyGuard, Ownable {
 
     // [VIEW FUNCTIONS]
 
+    /**
+     * @dev Calculates the number of shares corresponding to a given asset amount.
+     * @param assets The amount of assets to calculate shares for.
+     * @return The number of shares.
+     */
     function previewDeposit(uint256 assets) public view virtual returns (uint256) {
         uint256 sharePrice;
         uint256 currSharePrice = currentSharePrice();
@@ -389,8 +494,12 @@ contract RealVault is ReentrancyGuard, Ownable {
         return (assets * MULTIPLIER) / sharePrice;
     }
 
-    /// @dev send a certain amount of shares to the blackhole address when the protocol accepts
-    /// deposits for the first time. https://github.com/OpenZeppelin/openzeppelin-contracts/issues/3706
+    /**
+     * @dev Retrieves the current share price.
+     * Send a certain amount of shares to the blackhole address when the protocol accepts
+     * deposits for the first time. https://github.com/OpenZeppelin/openzeppelin-contracts/issues/3706
+     * @return price current share price.
+     */
     function currentSharePrice() public view returns (uint256 price) {
         IReal realToken = IReal(real);
         uint256 totalReal = realToken.totalSupply();
@@ -404,6 +513,11 @@ contract RealVault is ReentrancyGuard, Ownable {
         return (etherAmount * MULTIPLIER) / activeShare;
     }
 
+    /**
+     * @dev Retrieves the available amount in the vault.
+     * @return idleAmount idle amount amount in the vault.
+     * @return investedAmount invested amount in the vault.
+     */
     function getVaultAvailableAmount() public view returns (uint256 idleAmount, uint256 investedAmount) {
         IAssetsVault vault = IAssetsVault(assetsVault);
 

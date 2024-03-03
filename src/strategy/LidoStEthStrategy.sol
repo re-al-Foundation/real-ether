@@ -1,26 +1,48 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity =0.8.21;
 
 import {Strategy} from "./Strategy.sol";
-import {IStETH} from "../interface/IStETH.sol";
-import {IWithdrawalQueueERC721} from "../interface/IWithdrawalQueueERC721.sol";
-import {IStrategyManager} from "../interface/IStrategyManager.sol";
-import {ISwapManager} from "../interface/ISwapManager.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
+import {IWStETH} from "../interfaces/IWStETH.sol";
+import {ISwapManager} from "../interfaces/ISwapManager.sol";
+import {IStrategyManager} from "../interfaces/IStrategyManager.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
+import {IWithdrawalQueueERC721} from "../interfaces/IWithdrawalQueueERC721.sol";
 
+error Strategy__StETHWrap();
 error Strategy__ZeroAmount();
-error Strategy__InsufficientBalance();
 error Strategy__LidoDeposit();
+error Strategy__ZeroPoolLiquidity();
+error Strategy__LidoSharesTransfer();
 error Strategy__LidoRequestWithdraw();
+error Strategy__InsufficientBalance();
 
+/**
+ * @title LidoStEthStrategy
+ * @author Mavvverick
+ * @dev A strategy contract for generating eth yield by managing Lido staked ETH (stETH)
+ */
 contract LidoStEthStrategy is Strategy {
-    IStETH public STETH;
-    IWithdrawalQueueERC721 public stETHWithdrawalQueue;
     address public swapManager;
+    IStETH public STETH; //strategy token
+    address public WETH9; //swap token for uniV3
+    address public WSTETH; //swap token for uniV3
+    IWithdrawalQueueERC721 public stETHWithdrawalQueue;
 
+    /**
+     * @param _stETHAdress The address of the stETH contract
+     * @param _stETHWithdrawal The address of the stETH withdrawal contract
+     * @param _wstETHAdress The address of the wrapped stETH (wstETH) contract
+     * @param _weth9 The address of the WETH9 contract
+     * @param _swapManager The address of the SwapManager contract
+     * @param _manager The address of the strategy manager
+     * @param _name The name of the strategy
+     */
     constructor(
         address _stETHAdress,
         address _stETHWithdrawal,
+        address _wstETHAdress,
+        address _weth9,
         address _swapManager,
         address payable _manager,
         string memory _name
@@ -28,23 +50,72 @@ contract LidoStEthStrategy is Strategy {
         STETH = IStETH(_stETHAdress);
         stETHWithdrawalQueue = IWithdrawalQueueERC721(_stETHWithdrawal);
         swapManager = _swapManager;
+        WSTETH = _wstETHAdress;
+        WETH9 = _weth9;
     }
 
+    /**
+     * @dev Internal function to perform an instant withdrawal of stETH using swap pools.
+     * @param _amount The amount of stETH to withdraw
+     * @return actualAmount The actual amount of ETH withdrawn
+     */
     function _instantWithdraw(uint256 _amount) internal returns (uint256 actualAmount) {
-        // uint256 balance = STETH.balanceOf(address(this));
-        TransferHelper.safeApprove(address(STETH), swapManager, _amount);
-        actualAmount = ISwapManager(swapManager).swap(address(STETH), _amount);
+        // swap stEth for eth
+        actualAmount = _swapUsingFairQuote(_amount);
         uint256 share = STETH.sharesOf(address(this));
-        STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+        if (share > 0) {
+            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
+        }
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
+    /**
+     * @dev Internal function to swap stETH for ETH using UniV3 or Curve.
+     * @param _amountIn The amount of stETH to swap
+     * @return actualAmount The actual amount of ETH received after swapping
+     */
+    function _swapUsingFairQuote(uint256 _amountIn) internal returns (uint256 actualAmount) {
+        uint256 amountInForV3 = IWStETH(WSTETH).getWstETHByStETH(_amountIn);
+        uint256 v3Out = ISwapManager(swapManager).estimateV3AmountOut(uint128(amountInForV3), WSTETH, WETH9);
+        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH), WETH9);
+
+        if (v3Out == 0 && curveOut == 0) revert Strategy__ZeroPoolLiquidity();
+        address tokenIn;
+
+        if (v3Out > curveOut) {
+            // wrap stETH for uniswap pool
+            TransferHelper.safeApprove(address(STETH), WSTETH, _amountIn);
+            _amountIn = IWStETH(WSTETH).wrap(_amountIn);
+
+            if (_amountIn == 0) revert Strategy__StETHWrap();
+            tokenIn = WSTETH;
+
+            TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
+            actualAmount = ISwapManager(swapManager).swapUinv3(tokenIn, _amountIn);
+        } else {
+            tokenIn = address(STETH);
+            TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
+            actualAmount = ISwapManager(swapManager).swapCurve(tokenIn, _amountIn);
+        }
+    }
+
+    /**
+     * @notice Deposit ETH into the Lido stETH contract.
+     * @dev Only the strategy manager can call this function.
+     */
     function deposit() public payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
         uint256 shares = STETH.submit{value: msg.value}(address(0));
         if (shares == 0) revert Strategy__LidoDeposit();
     }
 
+    /**
+     * @notice Initiate a withdrawal of a specific amount of stETH.
+     * @dev Only the strategy manager can call this function.
+     * @param _ethAmount The amount of stETH to withdraw.
+     * @return actualAmount The actual amount of stETH withdrawn.
+     */
     function withdraw(uint256 _ethAmount) public override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
         if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
@@ -65,6 +136,10 @@ contract LidoStEthStrategy is Strategy {
         // }
     }
 
+    /**
+     * @notice Claim all pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function claims all pending withdrawal assets and transfers them to the assets vault.
+     */
     function claimAllPendingAssets() public {
         (uint256[] memory ids,,) = checkPendingAssets();
 
@@ -76,6 +151,7 @@ contract LidoStEthStrategy is Strategy {
                 i++;
             }
         }
+
         TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
     }
 
@@ -92,7 +168,8 @@ contract LidoStEthStrategy is Strategy {
 
         uint256 index = 0;
         bool isFinalised;
-        for (uint256 i = 0; i < statuses.length;) {
+        uint256 statusLen = statuses.length;
+        for (uint256 i = 0; i < statusLen;) {
             IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
             if (status.isFinalized && !status.isClaimed) {
                 //accumulate the claimable request id
@@ -124,15 +201,36 @@ contract LidoStEthStrategy is Strategy {
         return claimableRequestIds;
     }
 
+    /**
+     * @notice Initiate an instant withdrawal of stETH using swap pools
+     * @dev Only the strategy manager can call this function.
+     * @param _amount The amount of stETH to withdraw.
+     * @return actualAmount The actual amount of stETH withdrawn.
+     */
     function instantWithdraw(uint256 _amount) public override onlyManager returns (uint256 actualAmount) {
+        if (_amount == 0) return 0;
         actualAmount = _instantWithdraw(_amount);
     }
 
+    /**
+     * @notice Clear the strategy by withdrawing all stETH to the assets vault
+     * @dev This function withdraws all stETH from the strategy and transfers them to the strategy manager's assets vault.
+     * @return amount The amount of stETH withdrawn.
+     */
     function clear() public override onlyManager returns (uint256 amount) {
         uint256 balance = STETH.balanceOf(address(this));
+        // if stEth shares is zero return actualAmount = 0
+        if (balance == 0) return 0;
         amount = _instantWithdraw(balance);
     }
 
+    /**
+     * @notice Check the pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function retrieves the pending withdrawal assets and returns their IDs, total claimable amount, and total pending amount.
+     * @return ids An array of withdrawal request IDs.
+     * @return totalClaimable The total amount of claimable stETH.
+     * @return totalPending The total amount of pending stETH.
+     */
     function checkPendingAssets()
         public
         view
@@ -169,6 +267,16 @@ contract LidoStEthStrategy is Strategy {
     }
 
     /**
+     * @notice Get the pending and executable assets amount
+     * @dev This function retrieves the pending and executable assets from the stETH withdrawal queue.
+     * @return pending The total amount of pending stETH.
+     * @return executable The total amount of claimable stETH.
+     */
+    function checkPendingStatus() public view override returns (uint256 pending, uint256 executable) {
+        (, executable, pending) = checkPendingAssets();
+    }
+
+    /**
      * @notice Retrieves the withdrawal status of stETH requests
      * @return requestIds An array of withdrawal request IDs
      * @return statuses An array of withdrawal request statuses
@@ -196,24 +304,51 @@ contract LidoStEthStrategy is Strategy {
         statuses = stETHWithdrawalQueue.getWithdrawalStatus(requestIds);
     }
 
+    /**
+     * @notice Get the total value of assets managed by the strategy.
+     * @dev This function retrieves the total value of assets managed by the strategy, including invested, claimable, and pending values.
+     * @return value The total value of assets managed by the strategy.
+     */
     function getAllValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 
+    /**
+     * @notice Get the invested value of assets managed by the strategy.
+     * @dev This function retrieves the invested value of assets managed by the strategy.
+     * @return value The invested value of assets managed by the strategy.
+     */
     function getInvestedValue() public view override returns (uint256 value) {
         value = STETH.balanceOf(address(this));
     }
 
+    /**
+     * @notice Get the pending value of assets managed by the strategy.
+     * @dev This function retrieves the pending value of assets managed by the strategy.
+     * @return value The pending value of assets managed by the strategy.
+     */
     function getPendingValue() public view override returns (uint256 value) {
         (,, value) = checkPendingAssets();
     }
+    /**
+     * @notice Get the claimable value of assets managed by the strategy.
+     * @dev This function retrieves the claimable value of assets managed by the strategy.
+     * @return value The claimable value of assets managed by the strategy.
+     */
 
     function getClaimableValue() public view returns (uint256 value) {
         (, value,) = checkPendingAssets();
     }
 
+    /**
+     * @notice Get the total claimable and pending value of assets managed by the strategy.
+     * @dev This function retrieves the total claimable and pending value of assets managed by the strategy.
+     * @return value The total claimable and pending value of assets managed by the strategy.
+     */
     function getClaimableAndPendingValue() public view returns (uint256 value) {
         (, uint256 claimableValue, uint256 pendingValue) = checkPendingAssets();
         value = claimableValue + pendingValue;
     }
+
+    receive() external payable {}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity =0.8.21;
 
 import {Test, console2} from "forge-std/Test.sol";
 
@@ -8,10 +8,12 @@ import {Minter} from "src/token/Minter.sol";
 import {RealVault} from "src/RealVault.sol";
 import {StrategyManager} from "src/StrategyManager.sol";
 import {AssetsVault} from "src/AssetsVault.sol";
-import {MockStrategy} from "src/mock/MockStrategy.sol";
-import {MockPendingStrategy} from "src/mock/MockPendingStrategy.sol";
+import {TestEthStrategy} from "src/mock/TestEthStrategy.sol";
+import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 
 contract VaultTest is Test {
+    error RealVault__WithdrawInstantly();
+
     uint256 PRECISION = 10 ** 18;
 
     Real public real;
@@ -19,7 +21,7 @@ contract VaultTest is Test {
     RealVault public realVault;
     StrategyManager public strategyManager;
     AssetsVault public assetsVault;
-    MockStrategy public s1;
+    TestEthStrategy public s1;
 
     address minterAddress;
     address realVaultAddress;
@@ -60,7 +62,7 @@ contract VaultTest is Test {
         address[] memory strategies = new address[](1);
         uint256[] memory ratios = new uint256[](1);
 
-        s1 = new MockStrategy(payable(strategyManagerAddress), "Mock Eth Investment");
+        s1 = new TestEthStrategy(payable(strategyManagerAddress), "Mock Eth Investment");
         strategies[0] = address(s1);
         ratios[0] = 1000_000; // 1e6
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
@@ -87,20 +89,31 @@ contract VaultTest is Test {
         assertEq(real.balanceOf(user.addr), 1 ether);
     }
 
-    // function test_requestWithdrawFail() public {
-    //     deal(user.addr, 10 ether);
-    //     vm.startPrank(user.addr);
+    function test_depositTo0xdead() public {
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+        realVault.depositFor{value: 1 ether}(address(0xdead));
+        vm.stopPrank();
 
-    //     // Deposit in Round#0
-    //     realVault.deposit{value: 1 ether}();
+        assertEq(address(realVault).balance, 0 ether);
+        assertEq(address(assetsVault).balance, 1 ether);
+        assertEq(real.balanceOf(user.addr), 0 ether);
+    }
 
-    //     // Request Withraw in Round#0
-    //     // vm.expectRevert(bytes("RealVault__WithdrawInstantly()"));
-    //     // vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__WithdrawInstantly.selector));
-    //     // vm.expectRevert(abi.encodeWithSignature("Error(string)", "RealVault__WithdrawInstantly()"));
-    //     realVault.requestWithdraw(real.balanceOf(user.addr));
-    //     vm.stopPrank();
-    // }
+    function test_requestWithdrawFail() public {
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+
+        // Deposit in Round#0
+        realVault.deposit{value: 1 ether}();
+
+        // Request Withraw in Round#0
+        uint256 bal = real.balanceOf(user.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault__WithdrawInstantly.selector));
+
+        realVault.requestWithdraw(bal);
+        vm.stopPrank();
+    }
 
     function test_round0InstantWithdraw() public {
         deal(user.addr, 2 ether);
@@ -201,5 +214,184 @@ contract VaultTest is Test {
 
         assertEq(real.tokenPrice(), 1100000000000000000);
         assertApproxEqAbs(user1RealTokenValue + user2RealTokenValue, 2.1 ether, 1);
+    }
+
+    function test_addStrategy() public {
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+        vm.startPrank(proposal.addr);
+        realVault.addStrategy(address(s2));
+        vm.stopPrank();
+        (address[] memory addrs,) = strategyManager.getStrategies();
+        assertEq(addrs.length, 2);
+    }
+
+    function test_destroyStrategy() public {
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+        vm.startPrank(owner.addr);
+
+        realVault.destroyStrategy(address(s2));
+        vm.stopPrank();
+
+        (address[] memory addrs,) = strategyManager.getStrategies();
+        assertEq(addrs.length, 1);
+    }
+
+    function test_updatePortfolio() public {
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+        vm.startPrank(proposal.addr);
+
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+
+        strategies[0] = address(s2);
+        ratios[0] = 40_00_00; //40%
+
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        (address[] memory addrs, uint256[] memory allocations) = strategyManager.getStrategies();
+        assertEq(addrs.length, 2);
+        assertEq(allocations[1], 40_00_00);
+        // must set the s1 allocation to Zero
+        assertEq(allocations[0], 0);
+    }
+
+    function test_updateMultiplePortfolio() public {
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+        vm.startPrank(proposal.addr);
+
+        address[] memory strategies = new address[](2);
+        uint256[] memory ratios = new uint256[](2);
+
+        strategies[0] = address(s2);
+        ratios[0] = 40_00_00; //40%
+
+        strategies[1] = address(s1);
+        ratios[1] = 45_00_00; //45%
+
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        (address[] memory addrs, uint256[] memory allocations) = strategyManager.getStrategies();
+        assertEq(addrs.length, 2);
+        assertEq(allocations[0], 45_00_00);
+    }
+
+    function test_clearInvestedStrategy() public {
+        deal(user.addr, 2 ether);
+        deal(user2.addr, 2 ether);
+
+        vm.startPrank(user.addr);
+        // deposit in Round#0 by user1 at 1 pps
+        realVault.deposit{value: 1 ether}();
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        vm.stopPrank();
+
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+        vm.startPrank(proposal.addr);
+        // add new strategy s2 to the vault
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+        strategies[0] = address(s2);
+        ratios[0] = 40_00_00; //40%
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        assertEq(strategyManager.getAllStrategiesValue(), 1 ether);
+
+        vm.startPrank(owner.addr);
+        // clear the s1 strategy; asset will be returned to the assetVault
+        realVault.clearStrategy(address(s1));
+        vm.stopPrank();
+
+        assertEq(address(assetsVault).balance, 1 ether);
+    }
+
+    function test_clearInvestedStrategyAndRollOver() public {
+        deal(user.addr, 2 ether);
+        deal(user2.addr, 2 ether);
+
+        vm.startPrank(user.addr);
+        // deposit in Round#0 by user1 at 1 pps
+        realVault.deposit{value: 1 ether}();
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        vm.stopPrank();
+
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+
+        vm.startPrank(proposal.addr);
+        // add new strategy to the vault
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+        strategies[0] = address(s2);
+        ratios[0] = 40_00_00; //40%
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        vm.startPrank(owner.addr);
+        // clear the s1 strategy; asset will be returned to the assetVault
+        realVault.clearStrategy(address(s1));
+        vm.stopPrank();
+
+        // increment the time to the next round
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        assertEq(strategyManager.getAllStrategiesValue(), 0.4 ether);
+    }
+
+    function test_RollOverAndClearStrategy() public {
+        deal(user.addr, 2 ether);
+        deal(user2.addr, 2 ether);
+
+        vm.startPrank(user.addr);
+        // deposit in Round#0 by user1 at 1 pps
+        realVault.deposit{value: 1 ether}();
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        vm.stopPrank();
+
+        TestEthClaimableStrategy s2 =
+            new TestEthClaimableStrategy(payable(strategyManagerAddress), "Mock Eth Investment 2");
+
+        vm.startPrank(proposal.addr);
+        // add new strategy to the vault
+        address[] memory strategies = new address[](2);
+        uint256[] memory ratios = new uint256[](2);
+        strategies[0] = address(s2);
+        ratios[0] = 40_00_00; //40%
+        strategies[1] = address(s1);
+        ratios[1] = 45_00_00; //45%
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        // increment the time to the next round
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        vm.stopPrank();
+
+        assertEq(strategyManager.getAllStrategiesValue(), 0.85 ether);
+
+        vm.startPrank(owner.addr);
+        // clear the s1 strategy; asset will be returned to the assetVault
+        realVault.clearStrategy(address(s1));
+        vm.stopPrank();
+
+        assertEq(address(assetsVault).balance, 0.6 ether);
     }
 }

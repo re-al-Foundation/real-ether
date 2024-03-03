@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity =0.8.21;
 
 import {ERC20} from "oz/token/ERC20/ERC20.sol";
-import {IMinter} from "../interface/IMinter.sol";
+import {IMinter} from "../interfaces/IMinter.sol";
 
 error Real__ZeroAddress();
 error Real__NotMinter();
@@ -10,7 +10,7 @@ error Real__NotMinter();
 contract Real is ERC20 {
     address public minter;
 
-    constructor(address _minter) ERC20("Real Ether", "REAL") {
+    constructor(address _minter) ERC20("Real Ether", "reETH") {
         if (_minter == address(0)) revert Real__ZeroAddress();
         minter = _minter;
     }
@@ -31,6 +31,4 @@ contract Real is ERC20 {
     function tokenPrice() public view returns (uint256 price) {
         price = IMinter(minter).getTokenPrice();
     }
-
-    function updatePriceOnL2() external payable virtual returns (uint256 price) {}
 }
