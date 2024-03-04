@@ -14,6 +14,26 @@ import {TestEthStrategy} from "src/mock/TestEthStrategy.sol";
 import {LidoStEthStrategy} from "src/strategy/LidoStEthStrategy.sol";
 import {IWithdrawalQueueERC721} from "src/interfaces/IWithdrawalQueueERC721.sol";
 
+/**
+ * @title Lido Strategy Test Cases
+ * @author c-n-o-t-e, Mavvverick
+ * @dev Contract is used to test out Lido Strategy Contract by forking the
+ *         Mainnet chain to interact with Lido contracts and  Real Vault contract locally.
+ *
+ * Functionalities Tested:
+ * - Depositing into Lido.
+ * - Request Withdrawal from Lido.
+ * - Withdraw from Lido.
+ * - Add Lido Strategy in Real Vault.
+ * - Roll Over Multiple Strategies in Real Vault.
+ * - Clear Strateg In Round 0 in Real Vault.
+ * - Clear Strategy in Real Vault.
+ * - Destory Strategy In Round 0 in Real Vault.
+ * - Destory Lido Strategy in Real Vault.
+ * - Destory Other Strategy in Real Vault.
+ * - Force Withdraw By Real Vault.
+ */
+
 contract LidoStrategyTest is Test {
     uint256 PRECISION = 10 ** 18;
 
