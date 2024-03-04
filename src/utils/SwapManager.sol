@@ -27,6 +27,9 @@ contract SwapManager is Ownable {
         Curve
     }
 
+    uint256 internal constant ZERO = 0;
+    uint256 internal constant ONE = 1;
+    uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
     uint32 public constant MIN_TWAP_DURATION = 36_00;
     uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
@@ -48,6 +51,9 @@ contract SwapManager is Ownable {
     event TwapDurationUpdated(uint32 duration);
 
     constructor(address _intialOwner, address _weth9, address _null, address _v3SwapRouter) Ownable(_intialOwner) {
+        if (_weth9 == address(0) || _v3SwapRouter == address(0) || _v3SwapRouter == address(0)) {
+            revert SwapManager__ZeroAddress();
+        }
         WETH9 = _weth9;
         NULL = _null;
         v3SwapRouter = _v3SwapRouter;
@@ -83,7 +89,7 @@ contract SwapManager is Ownable {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         address pool = _getV3Pool(tokenIn);
-        uint256 deadline = block.timestamp + 10;
+        uint256 deadline = block.timestamp + MIN_DEADLINE;
         uint24 poolFee = IUniswapV3Pool(pool).fee();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
@@ -145,8 +151,8 @@ contract SwapManager is Ownable {
     }
 
     function _getCurvPoolTokens(address pool) internal view returns (address token0, address token1) {
-        token0 = ICurvePool(pool).coins(0);
-        token1 = ICurvePool(pool).coins(1);
+        token0 = ICurvePool(pool).coins(ZERO);
+        token1 = ICurvePool(pool).coins(ONE);
     }
 
     /// @notice Given a tick and a token amount, calculates the amount of token received in exchange

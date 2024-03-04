@@ -451,7 +451,7 @@ contract LidoStrategyTest is Test {
         vm.startPrank(address(realVault));
         strategyManager.forceWithdraw(2 ether);
         vm.stopPrank();
-        
+
         // 0.001259297158 deducted as swap fees
         assertApproxEqAbs(address(assetsVault).balance, 2 ether, 0.0015 ether);
     }

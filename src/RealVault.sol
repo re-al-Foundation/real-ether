@@ -39,6 +39,7 @@ error RealVault__MinimumRebaseInterval(uint256 minInterval);
  * managing assets and supporting the Real Network infrastructure.
  */
 contract RealVault is ReentrancyGuard, Ownable {
+    uint256 internal constant ONE = 1;
     uint256 internal constant MULTIPLIER = 10 ** 18;
     uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
     uint256 internal constant MAXMIUM_FEE_RATE = ONE_HUNDRED_PERCENT / 100; // 1%
@@ -80,7 +81,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     event CancelWithdraw(address indexed account, uint256 amount, uint256 round);
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
     event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
-    event RollToNextRound(uint256 round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
+    event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
     event VaultMigrated(address oldVault, address newVault);
     event StragetyAdded(address strategy);
     event StragetyDestroyed(address strategy);
@@ -267,7 +268,7 @@ contract RealVault is ReentrancyGuard, Ownable {
                 sharePrice = MULTIPLIER;
             } else {
                 uint256 currSharePrice = currentSharePrice();
-                uint256 latestSharePrice = roundPricePerShare[_latestRoundID - 1];
+                uint256 latestSharePrice = roundPricePerShare[_latestRoundID - ONE];
 
                 sharePrice = latestSharePrice < currSharePrice ? latestSharePrice : currSharePrice;
             }
@@ -338,7 +339,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         roundPricePerShare[_latestRoundID] = previewSharePrice < newSharePrice ? previewSharePrice : newSharePrice;
 
         settlementTime[_latestRoundID] = block.timestamp;
-        latestRoundID = _latestRoundID + 1;
+        latestRoundID = _latestRoundID + ONE;
 
         withdrawingSharesInPast = withdrawingSharesInPast + withdrawingSharesInRound;
         withdrawableAmountInPast =
@@ -487,7 +488,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         if (latestRoundID == 0) {
             sharePrice = MULTIPLIER;
         } else {
-            uint256 latestSharePrice = roundPricePerShare[latestRoundID - 1];
+            uint256 latestSharePrice = roundPricePerShare[latestRoundID - ONE];
             sharePrice = latestSharePrice > currSharePrice ? latestSharePrice : currSharePrice;
         }
 

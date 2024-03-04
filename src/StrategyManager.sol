@@ -39,6 +39,8 @@ contract StrategyManager {
         uint256 amount;
     }
 
+    uint256 internal constant ONE = 1;
+    uint256 internal constant DUST = 100_00;
     uint256 internal constant MINIMUM_ALLOCATION = 10_000; // 1%
     uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000; // 100%
 
@@ -67,7 +69,7 @@ contract StrategyManager {
         address[] memory _strategies,
         uint256[] memory _ratios
     ) {
-        if (_assetsVault == address(0)) revert StrategyManager__ZeroAddress();
+        if (_assetsVault == address(0) || _realVault == address(0)) revert StrategyManager__ZeroAddress();
 
         uint256 length = _strategies.length;
         if (length == 0) revert StrategyManager__ZeroStrategy();
@@ -104,6 +106,7 @@ contract StrategyManager {
      * - The caller must be the current RealVault contract.
      */
     function setNewVault(address _vault) external onlyVault {
+        if (_vault == address(0)) revert StrategyManager__ZeroAddress();
         address _oldRealVault = realVault;
         realVault = _vault;
         emit VaultUpdated(_oldRealVault, _vault);
@@ -217,7 +220,7 @@ contract StrategyManager {
         uint256 length = strategies.length();
         StrategySnapshot[] memory snapshots = new StrategySnapshot[](length);
         uint256 head;
-        uint256 tail = length - 1;
+        uint256 tail = length - ONE;
 
         for (uint256 i; i < length; i++) {
             address strategy = strategies.at(i);
@@ -383,7 +386,7 @@ contract StrategyManager {
      * @return status A boolean indicating whether the strategy can be destroyed.
      */
     function _couldDestroyStrategy(address _strategy) internal view returns (bool status) {
-        return ratios[_strategy] == 0 && IStrategy(_strategy).getAllValue() < 1e4;
+        return ratios[_strategy] == 0 && IStrategy(_strategy).getAllValue() < DUST;
     }
 
     // [View Functions]

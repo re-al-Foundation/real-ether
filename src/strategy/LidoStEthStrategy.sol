@@ -12,6 +12,7 @@ import {IWithdrawalQueueERC721} from "../interfaces/IWithdrawalQueueERC721.sol";
 error Strategy__StETHWrap();
 error Strategy__ZeroAmount();
 error Strategy__LidoDeposit();
+error Strategy__ZeroAddress();
 error Strategy__ZeroPoolLiquidity();
 error Strategy__LidoSharesTransfer();
 error Strategy__LidoRequestWithdraw();
@@ -47,6 +48,11 @@ contract LidoStEthStrategy is Strategy {
         address payable _manager,
         string memory _name
     ) Strategy(_manager, _name) {
+        if (
+            _stETHAdress == address(0) || _stETHWithdrawal == address(0) || _wstETHAdress == address(0)
+                || _weth9 == address(0) || _swapManager == address(0) || _manager == address(0)
+        ) revert Strategy__ZeroAddress();
+
         STETH = IStETH(_stETHAdress);
         stETHWithdrawalQueue = IWithdrawalQueueERC721(_stETHWithdrawal);
         swapManager = _swapManager;
@@ -121,7 +127,7 @@ contract LidoStEthStrategy is Strategy {
         if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
 
         //approve steth for WithdrawalQueueERC721
-        STETH.approve(address(stETHWithdrawalQueue), _ethAmount);
+        TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
 
         uint256[] memory requestedAmounts = new uint256[](1);
         requestedAmounts[0] = _ethAmount;
@@ -131,9 +137,9 @@ contract LidoStEthStrategy is Strategy {
         if (ids.length == 0) revert Strategy__LidoRequestWithdraw();
 
         actualAmount = _ethAmount;
-        // if (address(this).balance > 0) {
-        //     TransferHelper.safeTransferETH(manager, address(this).balance);
-        // }
+        if (address(this).balance > 0) {
+            TransferHelper.safeTransferETH(manager, address(this).balance);
+        }
     }
 
     /**

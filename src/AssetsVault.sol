@@ -64,6 +64,7 @@ contract AssetsVault {
      * @param _vault Address of the new vault contract.
      */
     function setNewVault(address _vault) external onlyPermit {
+        if (_vault == address(0)) revert AssetsVault__ZeroAddress();
         address _oldRealVault = realVault;
         realVault = _vault;
         emit VaultUpdated(_oldRealVault, _vault);

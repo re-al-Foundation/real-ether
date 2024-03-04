@@ -97,6 +97,7 @@ abstract contract Strategy {
      * @param _governance The address to set as the new governance.
      */
     function setGovernance(address _governance) external onlyGovernance {
+        if (_governance == address(0)) revert Strategy__ZeroAddress();
         emit TransferGovernance(governance, _governance);
         governance = _governance;
     }
