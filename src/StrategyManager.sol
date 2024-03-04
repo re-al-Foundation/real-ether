@@ -150,7 +150,7 @@ contract StrategyManager {
      * @notice Clears the total value from the given strategy.
      * @param _strategy The address of the strategy to clear.
      */
-    function clearStrategy(address _strategy) public onlyVault {
+    function clearStrategy(address _strategy) external onlyVault {
         _clearStrategy(_strategy, false);
     }
 
@@ -422,7 +422,7 @@ contract StrategyManager {
      * @notice Gets the total asset value of all strategies.
      * @return _value The total value of all strategies.
      */
-    function getAllStrategiesValue() public view returns (uint256 _value) {
+    function getAllStrategiesValue() external view returns (uint256 _value) {
         uint256 length = strategies.length();
         for (uint256 i; i < length;) {
             _value = _value + getStrategyValue(strategies.at(i));
@@ -450,7 +450,7 @@ contract StrategyManager {
      * @notice Gets the total pending asset value of all strategies.
      * @return _value The total pending value of all strategies.
      */
-    function getAllStrategyPendingValue() public view returns (uint256 _value) {
+    function getAllStrategyPendingValue() external view returns (uint256 _value) {
         uint256 length = strategies.length();
         for (uint256 i; i < length;) {
             _value = _value + getStrategyPendingValue(strategies.at(i));
@@ -465,7 +465,7 @@ contract StrategyManager {
      * @return addrs The array of strategy addresses.
      * @return allocations The array of allocation ratios.
      */
-    function getStrategies() public view returns (address[] memory addrs, uint256[] memory allocations) {
+    function getStrategies() external view returns (address[] memory addrs, uint256[] memory allocations) {
         uint256 length = strategies.length();
 
         addrs = new address[](length);

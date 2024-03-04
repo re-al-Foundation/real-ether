@@ -14,18 +14,18 @@ contract TestEthStrategy is Strategy {
 
     constructor(address payable _manager, string memory _name) Strategy(_manager, _name) {}
 
-    function deposit() public payable override onlyManager {
+    function deposit() external payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
     }
 
-    function withdraw(uint256 _ethAmount) public override onlyManager returns (uint256 actualAmount) {
+    function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
         if (_ethAmount > getAllValue()) revert Strategy__InsufficientBalance();
         actualAmount = _ethAmount;
         TransferHelper.safeTransferETH(manager, _ethAmount);
     }
 
-    function clear() public override onlyManager returns (uint256 amount) {
+    function clear() external override onlyManager returns (uint256 amount) {
         amount = getAllValue();
         TransferHelper.safeTransferETH(manager, amount);
     }

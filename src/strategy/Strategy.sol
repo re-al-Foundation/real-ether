@@ -38,27 +38,27 @@ abstract contract Strategy {
     /**
      * @dev Deposit function to deposit funds into the strategy.
      */
-    function deposit() public payable virtual onlyManager {}
+    function deposit() external payable virtual onlyManager {}
 
     /**
      * @dev Withdraw function to withdraw funds from the strategy.
      * @param _amount The amount of funds to withdraw.
      * @return actualAmount The actual amount withdrawn.
      */
-    function withdraw(uint256 _amount) public virtual onlyManager returns (uint256 actualAmount) {}
+    function withdraw(uint256 _amount) external virtual onlyManager returns (uint256 actualAmount) {}
 
     /**
      * @dev Instant withdraw function to immediately withdraw funds from the strategy.
      * @param _amount The amount of funds to withdraw.
      * @return actualAmount The actual amount withdrawn.
      */
-    function instantWithdraw(uint256 _amount) public virtual onlyManager returns (uint256 actualAmount) {}
+    function instantWithdraw(uint256 _amount) external virtual onlyManager returns (uint256 actualAmount) {}
 
     /**
      * @dev Clear function to clear any allocated funds or assets in the strategy.
      * @return amount The amount of funds cleared.
      */
-    function clear() public virtual onlyManager returns (uint256 amount) {}
+    function clear() external virtual onlyManager returns (uint256 amount) {}
 
     /**
      * @dev Execute pending request function to execute any pending transactions in the strategy.
@@ -90,7 +90,7 @@ abstract contract Strategy {
      * @return pending The amount of pending transactions.
      * @return executable The claimable amount of transactions ready to be executed.
      */
-    function checkPendingStatus() public virtual returns (uint256 pending, uint256 executable) {}
+    function checkPendingStatus() external virtual returns (uint256 pending, uint256 executable) {}
 
     /**
      * @dev Sets the governance address.

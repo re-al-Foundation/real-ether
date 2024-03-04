@@ -110,7 +110,7 @@ contract LidoStEthStrategy is Strategy {
      * @notice Deposit ETH into the Lido stETH contract.
      * @dev Only the strategy manager can call this function.
      */
-    function deposit() public payable override onlyManager {
+    function deposit() external payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
         uint256 shares = STETH.submit{value: msg.value}(address(0));
         if (shares == 0) revert Strategy__LidoDeposit();
@@ -122,7 +122,7 @@ contract LidoStEthStrategy is Strategy {
      * @param _ethAmount The amount of stETH to withdraw.
      * @return actualAmount The actual amount of stETH withdrawn.
      */
-    function withdraw(uint256 _ethAmount) public override onlyManager returns (uint256 actualAmount) {
+    function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
         if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
 
@@ -146,7 +146,7 @@ contract LidoStEthStrategy is Strategy {
      * @notice Claim all pending withdrawal assets from the stETH withdrawal queue.
      * @dev This function claims all pending withdrawal assets and transfers them to the assets vault.
      */
-    function claimAllPendingAssets() public {
+    function claimAllPendingAssets() external {
         (uint256[] memory ids,,) = checkPendingAssets();
 
         uint256 len = ids.length;
@@ -213,7 +213,7 @@ contract LidoStEthStrategy is Strategy {
      * @param _amount The amount of stETH to withdraw.
      * @return actualAmount The actual amount of stETH withdrawn.
      */
-    function instantWithdraw(uint256 _amount) public override onlyManager returns (uint256 actualAmount) {
+    function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
         if (_amount == 0) return 0;
         actualAmount = _instantWithdraw(_amount);
     }
@@ -223,7 +223,7 @@ contract LidoStEthStrategy is Strategy {
      * @dev This function withdraws all stETH from the strategy and transfers them to the strategy manager's assets vault.
      * @return amount The amount of stETH withdrawn.
      */
-    function clear() public override onlyManager returns (uint256 amount) {
+    function clear() external override onlyManager returns (uint256 amount) {
         uint256 balance = STETH.balanceOf(address(this));
         // if stEth shares is zero return actualAmount = 0
         if (balance == 0) return 0;
@@ -278,7 +278,7 @@ contract LidoStEthStrategy is Strategy {
      * @return pending The total amount of pending stETH.
      * @return executable The total amount of claimable stETH.
      */
-    function checkPendingStatus() public view override returns (uint256 pending, uint256 executable) {
+    function checkPendingStatus() external view override returns (uint256 pending, uint256 executable) {
         (, executable, pending) = checkPendingAssets();
     }
 

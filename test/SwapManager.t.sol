@@ -18,7 +18,6 @@ import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
  * - Swaping wstETH to ETH via Uniswap protocol.
  * - Swaping stETH to ETH via Curve protocol.
  */
-
 contract SwapManagerTest is Test {
     SwapManager public swapManager;
     StrategyManager public strategyManager;

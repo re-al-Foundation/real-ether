@@ -33,7 +33,6 @@ import {IWithdrawalQueueERC721} from "src/interfaces/IWithdrawalQueueERC721.sol"
  * - Destory Other Strategy in Real Vault.
  * - Force Withdraw By Real Vault.
  */
-
 contract LidoStrategyTest is Test {
     uint256 PRECISION = 10 ** 18;
 

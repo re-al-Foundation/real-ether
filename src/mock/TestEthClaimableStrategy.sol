@@ -15,12 +15,12 @@ contract TestEthClaimableStrategy is Strategy {
 
     constructor(address payable _manager, string memory _name) Strategy(_manager, _name) {}
 
-    function deposit() public payable override onlyManager {
+    function deposit() external payable override onlyManager {
         if (msg.value == 0) revert TestEthClaimableStrategy__ZeroAmount();
         lockedReserve += msg.value;
     }
 
-    function withdraw(uint256 _ethAmount) public override onlyManager returns (uint256 actualAmount) {
+    function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert TestEthClaimableStrategy__ZeroAmount();
         if (_ethAmount > getAllValue()) revert TestEthClaimableStrategy__InsufficientBalance();
         // Mock: On withdraw request will be raised to initiate withdraw from the strategy protocol
@@ -30,13 +30,13 @@ contract TestEthClaimableStrategy is Strategy {
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
-    function claimAllPendingAssets() public {
+    function claimAllPendingAssets() external {
         uint256 _amount = pendingReserve;
         pendingReserve = 0;
         TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), _amount);
     }
 
-    function clear() public override onlyManager returns (uint256 amount) {
+    function clear() external override onlyManager returns (uint256 amount) {
         uint256 claimableAmount = getClaimableValue();
         amount = getBalance() + claimableAmount;
         if (amount > address(this).balance) revert TestEthClaimableStrategy__InsufficientBalance();

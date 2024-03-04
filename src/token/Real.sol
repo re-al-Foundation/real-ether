@@ -28,7 +28,7 @@ contract Real is ERC20 {
         _burn(from, value);
     }
 
-    function tokenPrice() public view returns (uint256 price) {
+    function tokenPrice() external view returns (uint256 price) {
         price = IMinter(minter).getTokenPrice();
     }
 }
