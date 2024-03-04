@@ -1,37 +1,44 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity =0.8.21;
 
-import {RealETH} from "./RealETH.sol";
-import {RealVault} from "../RealVault.sol";
+import {IReal} from "../interfaces/IReal.sol";
+import {IRealVault} from "../interfaces/IRealVault.sol";
+
+error Minter__ZeroAddress();
+error Minter__NotVault();
 
 contract Minter {
-    address public realETH;
+    address public real;
     address payable public vault;
 
-    constructor(address _realETH, address payable _vault) {
-        require(_realETH != address(0) && _vault != address(0), "ZERO ADDRESS");
-        realETH = _realETH;
+    event VaultUpdated(address oldRealVault, address newRealVault);
+
+    constructor(address _real, address payable _vault) {
+        if (_real == address(0) || _vault == address(0)) revert Minter__ZeroAddress();
+        real = _real;
         vault = _vault;
     }
 
     modifier onlyVault() {
-        require(msg.sender == vault, "!vault");
+        if (msg.sender != vault) revert Minter__NotVault();
         _;
     }
 
     function mint(address _to, uint256 _amount) external onlyVault {
-        RealETH(realETH).mint(_to, _amount);
+        IReal(real).mint(_to, _amount);
     }
 
     function burn(address _from, uint256 _amount) external onlyVault {
-        RealETH(realETH).burn(_from, _amount);
+        IReal(real).burn(_from, _amount);
     }
 
     function setNewVault(address _vault) external onlyVault {
+        address _oldRealVault = vault;
         vault = payable(_vault);
+        emit VaultUpdated(_oldRealVault, _vault);
     }
 
     function getTokenPrice() public view returns (uint256 price) {
-        price = RealVault(vault).currentSharePrice();
+        price = IRealVault(vault).currentSharePrice();
     }
 }
