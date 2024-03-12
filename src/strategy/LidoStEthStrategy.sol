@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
 
+import {EnumerableSet} from "oz/utils/structs/EnumerableSet.sol";
 import {Strategy} from "./Strategy.sol";
+
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IWStETH} from "../interfaces/IWStETH.sol";
 import {ISwapManager} from "../interfaces/ISwapManager.sol";
@@ -17,6 +19,7 @@ error Strategy__ZeroPoolLiquidity();
 error Strategy__LidoSharesTransfer();
 error Strategy__LidoRequestWithdraw();
 error Strategy__InsufficientBalance();
+error Strategy__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 /**
  * @title LidoStEthStrategy
@@ -24,11 +27,15 @@ error Strategy__InsufficientBalance();
  * @dev A strategy contract for generating eth yield by managing Lido staked ETH (stETH)
  */
 contract LidoStEthStrategy is Strategy {
+    using EnumerableSet for EnumerableSet.UintSet;
+
     address public swapManager;
     IStETH public STETH; //strategy token
     address public WETH9; //swap token for uniV3
     address public WSTETH; //swap token for uniV3
     IWithdrawalQueueERC721 public stETHWithdrawalQueue;
+
+    EnumerableSet.UintSet private withdrawQueue;
 
     /**
      * @param _stETHAdress The address of the stETH contract
@@ -88,6 +95,9 @@ contract LidoStEthStrategy is Strategy {
         uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH), WETH9);
 
         if (v3Out == 0 && curveOut == 0) revert Strategy__ZeroPoolLiquidity();
+
+        uint256 quoteAmount = v3Out > curveOut ? v3Out : curveOut;
+        uint256 quoteAmountMin = ISwapManager(swapManager).getMinimumAmount(WETH9, quoteAmount);
         address tokenIn;
 
         if (v3Out > curveOut) {
@@ -104,6 +114,44 @@ contract LidoStEthStrategy is Strategy {
             tokenIn = address(STETH);
             TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
             actualAmount = ISwapManager(swapManager).swapCurve(tokenIn, _amountIn);
+        }
+
+        // check recieved amount out using fairQuoteMin
+        if (actualAmount < quoteAmountMin) revert Strategy__TooLittleRecieved(actualAmount, quoteAmountMin);
+    }
+
+    function _checkPendingAssets(uint256[] memory requestIds)
+        internal
+        view
+        returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
+    {
+        uint256 requestLen = requestIds.length;
+        if (requestLen == 0) return (new uint256[](0), 0, 0);
+        ids = new uint256[](requestLen);
+
+        IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses =
+            stETHWithdrawalQueue.getWithdrawalStatus(requestIds);
+
+        uint256 index = 0;
+        uint256 len = statuses.length;
+
+        for (uint256 i = 0; i < len;) {
+            IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
+            if (status.isClaimed) continue;
+            if (status.isFinalized) {
+                ids[index++] = requestIds[i];
+                totalClaimable += status.amountOfStETH;
+            } else {
+                totalPending += status.amountOfStETH;
+            }
+
+            unchecked {
+                i++;
+            }
+        }
+
+        assembly {
+            mstore(ids, index)
         }
     }
 
@@ -137,6 +185,9 @@ contract LidoStEthStrategy is Strategy {
         uint256[] memory ids = stETHWithdrawalQueue.requestWithdrawals(requestedAmounts, address(this));
         if (ids.length == 0) revert Strategy__LidoRequestWithdraw();
 
+        // push the withdraw request id
+        withdrawQueue.add(ids[0]);
+
         actualAmount = _ethAmount;
         if (address(this).balance > 0) {
             TransferHelper.safeTransferETH(manager, address(this).balance);
@@ -146,14 +197,19 @@ contract LidoStEthStrategy is Strategy {
     /**
      * @notice Claim all pending withdrawal assets from the stETH withdrawal queue.
      * @dev This function claims all pending withdrawal assets and transfers them to the assets vault.
+     * The queue will always stay within bounds since withdrawal is requested once per rebase cycle,
+     * which is 365 requests in a year for a 1-day epoch cycle or 52 requests in a year for a 7-day epoch cycle
+     * If the queue expands to a level where withdrawQueue consumes excessive gas, use claimAllPendingAssetsByIds instead.
      */
     function claimAllPendingAssets() external {
-        (uint256[] memory ids,,) = checkPendingAssets();
+        uint256[] memory withdrawIds = withdrawQueue.values();
+        (uint256[] memory ids,,) = checkPendingAssets(withdrawIds);
 
         uint256 len = ids.length;
-
         for (uint256 i = 0; i < len;) {
             stETHWithdrawalQueue.claimWithdrawal(ids[i]);
+            // remove claimed request Ids
+            withdrawQueue.remove(ids[i]);
             unchecked {
                 i++;
             }
@@ -174,6 +230,16 @@ contract LidoStEthStrategy is Strategy {
     function claimAllPendingAssetsByIds(uint256[] memory claimableRequestIds, uint256[] memory hints) external {
         //calim withdrawal amount
         stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
+
+        // remove claimed request Ids
+        uint256 requestsLen = claimableRequestIds.length;
+        for (uint256 i = 0; i < requestsLen;) {
+            withdrawQueue.remove(claimableRequestIds[i]);
+            unchecked {
+                i++;
+            }
+        }
+
         // Transfer the claimed asset to the assets vault
         if (address(this).balance > 0) {
             TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
@@ -215,34 +281,24 @@ contract LidoStEthStrategy is Strategy {
         view
         returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
     {
-        uint256[] memory requestIds = stETHWithdrawalQueue.getWithdrawalRequests(address(this));
-        if (requestIds.length == 0) return (new uint256[](0), 0, 0);
-        ids = new uint256[](requestIds.length);
+        uint256[] memory requestIds = withdrawQueue.values();
+        (ids, totalClaimable, totalPending) = _checkPendingAssets(requestIds);
+    }
 
-        IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses =
-            stETHWithdrawalQueue.getWithdrawalStatus(requestIds);
-
-        uint256 index = 0;
-        uint256 len = statuses.length;
-
-        for (uint256 i = 0; i < len;) {
-            IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
-            if (status.isClaimed) continue;
-            if (status.isFinalized) {
-                ids[index++] = requestIds[i];
-                totalClaimable += status.amountOfStETH;
-            } else {
-                totalPending += status.amountOfStETH;
-            }
-
-            unchecked {
-                i++;
-            }
-        }
-
-        assembly {
-            mstore(ids, index)
-        }
+    /**
+     * @notice Check the pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function retrieves the pending withdrawal assets and returns their IDs, total claimable amount, and total pending amount.
+     * @param requestIds An array of withdrawal request IDs
+     * @return ids An array of withdrawal request IDs.
+     * @return totalClaimable The total amount of claimable stETH.
+     * @return totalPending The total amount of pending stETH.
+     */
+    function checkPendingAssets(uint256[] memory requestIds)
+        public
+        view
+        returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
+    {
+        (ids, totalClaimable, totalPending) = _checkPendingAssets(requestIds);
     }
 
     /**
@@ -253,6 +309,14 @@ contract LidoStEthStrategy is Strategy {
      */
     function checkPendingStatus() external view override returns (uint256 pending, uint256 executable) {
         (, executable, pending) = checkPendingAssets();
+    }
+
+    /**
+     * @notice Retrieves the withdrawal request ids
+     * @return requestIds An array of withdrawal request IDs
+     */
+    function getRequestIds() public view returns (uint256[] memory requestIds) {
+        return withdrawQueue.values();
     }
 
     /**

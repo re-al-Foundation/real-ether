@@ -20,6 +20,7 @@ error SwapManager__NoPool(address tokenIn);
 error SwapManager__MIN_TWAP_DURATION(uint32 duration);
 error SwapManager__ExceedPercentage(uint256 given, uint256 max);
 error SwapManager__SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
+error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 contract SwapManager is Ownable {
     enum DEX {
@@ -68,7 +69,8 @@ contract SwapManager is Ownable {
      */
     function swap(address tokenIn, uint256 amountIn) external returns (uint256 amountOut) {
         DEX dexType;
-        (dexType,) = getFairQuote(amountIn, tokenIn);
+        uint256 quoteAmount;
+        (dexType, quoteAmount) = getFairQuote(amountIn, tokenIn);
 
         if (dexType == DEX.Uniswap) {
             amountOut = swapUinv3(tokenIn, amountIn);
@@ -77,6 +79,10 @@ contract SwapManager is Ownable {
         if (dexType == DEX.Curve) {
             amountOut = swapCurve(tokenIn, amountIn);
         }
+
+        // check recieved amount out using fairQuoteMin
+        uint256 quoteAmountMin = getMinimumAmount(WETH9, quoteAmount);
+        if (amountOut < quoteAmountMin) revert SwapManager__TooLittleRecieved(amountOut, quoteAmountMin);
     }
 
     /**
@@ -85,7 +91,7 @@ contract SwapManager is Ownable {
     function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         // estimate price using the twap
         uint256 quoteOut = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
-        uint256 amountOutMinimum = _getMinimumAmount(WETH9, quoteOut);
+        uint256 amountOutMinimum = getMinimumAmount(WETH9, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         address pool = _getV3Pool(tokenIn);
@@ -115,7 +121,7 @@ contract SwapManager is Ownable {
         address tokenOut = token0 == tokenIn ? token1 : token0;
 
         uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn, tokenOut);
-        uint256 amountOutMinimum = _getMinimumAmount(tokenOut, quoteOut);
+        uint256 amountOutMinimum = getMinimumAmount(tokenOut, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
@@ -145,7 +151,7 @@ contract SwapManager is Ownable {
         return token0 == tokenIn ? (_i0, _i1) : (_i1, _i0);
     }
 
-    function _getMinimumAmount(address token, uint256 amount) internal view returns (uint256) {
+    function getMinimumAmount(address token, uint256 amount) public view returns (uint256) {
         if (slippage[token] == 0) revert SwapManager__SlippageNotSet();
         return (amount * slippage[token]) / ONE_HUNDRED_PERCENT;
     }
