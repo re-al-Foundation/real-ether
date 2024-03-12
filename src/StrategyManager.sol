@@ -39,6 +39,7 @@ contract StrategyManager {
         uint256 amount;
     }
 
+    uint256 internal cumulativeRatio;
     uint256 internal constant ONE = 1;
     uint256 internal constant DUST = 100_00;
     uint256 internal constant MINIMUM_ALLOCATION = 10_000; // 1%
@@ -281,7 +282,7 @@ contract StrategyManager {
         for (uint256 i; i < length;) {
             address strategy = strategies.at(i);
 
-            uint256 withAmount = (_amount * ratios[strategy]) / ONE_HUNDRED_PERCENT;
+            uint256 withAmount = (_amount * ratios[strategy]) / cumulativeRatio;
 
             if (withAmount != 0) {
                 actualAmount = IStrategy(strategy).instantWithdraw(withAmount) + actualAmount;
@@ -336,6 +337,7 @@ contract StrategyManager {
             }
         }
 
+        cumulativeRatio = totalRatio;
         if (totalRatio > ONE_HUNDRED_PERCENT) revert StrategyManager__InvalidPercentage();
     }
 
