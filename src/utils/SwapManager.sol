@@ -211,14 +211,8 @@ contract SwapManager is Ownable {
         returns (uint256 amountOut)
     {
         address pool = _getCurvePool(tokenIn);
-        (address token0,) = _getCurvPoolTokens(pool);
-        uint256 pricePerShare = ICurvePool(pool).get_virtual_price();
-
-        if (token0 == tokenIn) {
-            amountOut = (amountIn * pricePerShare) / DECIMAL_PRECISION;
-        } else {
-            amountOut = (amountIn * DECIMAL_PRECISION) / pricePerShare;
-        }
+        (int128 i, int128 j) = _getCurveTokenIndex(pool, tokenIn);
+        amountOut = ICurvePool(pool).get_dy(i, j, amountIn);
     }
 
     /**

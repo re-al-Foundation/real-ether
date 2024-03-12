@@ -31,4 +31,6 @@ interface ICurvePool {
      * @return coin address of the coin.
      */
     function coins(uint256 index) external view returns (address coin);
+
+    function get_dy(int128 i, int128 j, uint256 dx) external view returns (uint256);
 }
