@@ -65,11 +65,12 @@ contract LidoStEthStrategy is Strategy {
      * @param _amount The amount of stETH to withdraw
      * @return actualAmount The actual amount of ETH withdrawn
      */
-    function _instantWithdraw(uint256 _amount) internal returns (uint256 actualAmount) {
+    function _instantWithdraw(uint256 _amount, bool isClear) internal returns (uint256 actualAmount) {
         // swap stEth for eth
         actualAmount = _swapUsingFairQuote(_amount);
         uint256 share = STETH.sharesOf(address(this));
-        if (share > 0) {
+
+        if (isClear && share > 0) {
             uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
             if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
         }
@@ -215,7 +216,7 @@ contract LidoStEthStrategy is Strategy {
      */
     function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
         if (_amount == 0) return 0;
-        actualAmount = _instantWithdraw(_amount);
+        actualAmount = _instantWithdraw(_amount, false);
     }
 
     /**
@@ -227,7 +228,7 @@ contract LidoStEthStrategy is Strategy {
         uint256 balance = STETH.balanceOf(address(this));
         // if stEth shares is zero return actualAmount = 0
         if (balance == 0) return 0;
-        amount = _instantWithdraw(balance);
+        amount = _instantWithdraw(balance, true);
     }
 
     /**
