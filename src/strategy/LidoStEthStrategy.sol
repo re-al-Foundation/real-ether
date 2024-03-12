@@ -165,47 +165,19 @@ contract LidoStEthStrategy is Strategy {
     /**
      * @notice Redeems eth amount and deposit redeemed amount in the bridge
      * NB! Array of request ids should be sorted
-     * @param requestIds An array of withdrawal request ids
-     * @return claimableRequestIds An array of withdrawal request IDs that are claimable
+     * @param claimableRequestIds An array of withdrawal request IDs that are claimable
+     * @param hints Array of hints used to find required checkpoint for the request
+     *  Reverts if requestIds and hints arrays length differs
+     *  Reverts if any requestId or hint in arguments are not valid
+     *  Reverts if any request is not finalized or already claimed
      */
-    function claimAllPendingAssetsByIds(uint256[] memory requestIds) external returns (uint256[] memory) {
-        // Array of request ids must be sorted
-        IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses = getStETHWithdrawalStatusForIds(requestIds);
-        uint256[] memory claimableRequestIds = new uint256[](requestIds.length);
-
-        uint256 index = 0;
-        bool isFinalised;
-        uint256 statusLen = statuses.length;
-        for (uint256 i = 0; i < statusLen;) {
-            IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
-            if (status.isFinalized && !status.isClaimed) {
-                //accumulate the claimable request id
-                claimableRequestIds[index++] = requestIds[i];
-                isFinalised = true;
-            }
-            unchecked {
-                i++;
-            }
-        }
-
-        // remove the empty zeros
-        assembly {
-            mstore(claimableRequestIds, index)
-        }
-
-        if (isFinalised) {
-            uint256[] memory hints = stETHWithdrawalQueue.findCheckpointHints(
-                claimableRequestIds, 1, stETHWithdrawalQueue.getLastCheckpointIndex()
-            );
-
-            //calim withdrawal amount
-            stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
-
-            // Transfer the claimed asset to the assets vault
+    function claimAllPendingAssetsByIds(uint256[] memory claimableRequestIds, uint256[] memory hints) external {
+        //calim withdrawal amount
+        stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
+        // Transfer the claimed asset to the assets vault
+        if (address(this).balance > 0) {
             TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
         }
-
-        return claimableRequestIds;
     }
 
     /**
