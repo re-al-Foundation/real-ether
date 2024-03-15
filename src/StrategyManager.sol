@@ -329,8 +329,11 @@ contract StrategyManager {
             // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
-            ratios[_strategies[i]] = _ratios[i];
-            totalRatio = totalRatio + _ratios[i];
+
+            if (ratios[_strategies[i]] == 0) {
+                ratios[_strategies[i]] = _ratios[i];
+                totalRatio = totalRatio + _ratios[i];
+            }
 
             unchecked {
                 i++;
