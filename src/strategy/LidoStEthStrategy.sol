@@ -65,7 +65,7 @@ contract LidoStEthStrategy is Strategy {
     ) Strategy(_manager, _name) {
         if (
             _stETHAdress == address(0) || _stETHWithdrawal == address(0) || _wstETHAdress == address(0)
-                || _weth9 == address(0) || _swapManager == address(0) || _manager == address(0)
+                || _weth9 == address(0) || _swapManager == address(0)
         ) revert Strategy__ZeroAddress();
 
         STETH = IStETH(_stETHAdress);
@@ -94,7 +94,7 @@ contract LidoStEthStrategy is Strategy {
     function _swapUsingFairQuote(uint256 _amountIn) internal returns (uint256 actualAmount) {
         uint256 amountInForV3 = IWStETH(WSTETH).getWstETHByStETH(_amountIn);
         uint256 v3Out = ISwapManager(swapManager).estimateV3AmountOut(uint128(amountInForV3), WSTETH, WETH9);
-        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH), WETH9);
+        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH));
 
         if (v3Out == 0 && curveOut == 0) revert Strategy__ZeroPoolLiquidity();
 

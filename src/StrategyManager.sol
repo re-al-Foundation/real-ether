@@ -42,8 +42,8 @@ contract StrategyManager {
     uint256 internal cumulativeRatio;
     uint256 internal constant ONE = 1;
     uint256 internal constant DUST = 100_00;
-    uint256 internal constant MINIMUM_ALLOCATION = 10_000; // 1%
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000; // 100%
+    uint256 internal constant MINIMUM_ALLOCATION = 100_00; // 1%
+    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000; // 100%
 
     address public realVault;
     address payable public immutable assetsVault;
@@ -329,8 +329,11 @@ contract StrategyManager {
             // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
-            ratios[_strategies[i]] = _ratios[i];
-            totalRatio = totalRatio + _ratios[i];
+
+            if (ratios[_strategies[i]] == 0) {
+                ratios[_strategies[i]] = _ratios[i];
+                totalRatio = totalRatio + _ratios[i];
+            }
 
             unchecked {
                 i++;
