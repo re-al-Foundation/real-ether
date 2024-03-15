@@ -65,9 +65,8 @@ contract AssetsVault {
      */
     function setNewVault(address _vault) external onlyPermit {
         if (_vault == address(0)) revert AssetsVault__ZeroAddress();
-        address _oldRealVault = realVault;
+        emit VaultUpdated(realVault, _vault);
         realVault = _vault;
-        emit VaultUpdated(_oldRealVault, _vault);
     }
 
     /**
