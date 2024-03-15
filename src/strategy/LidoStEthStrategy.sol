@@ -29,6 +29,14 @@ error Strategy__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 contract LidoStEthStrategy is Strategy {
     using EnumerableSet for EnumerableSet.UintSet;
 
+    /// @notice minimal amount of stETH that is possible to withdraw
+    uint256 public constant MIN_STETH_WITHDRAWAL_AMOUNT = 1_00;
+
+    /// @notice maximum amount of stETH that is possible to withdraw by a single request
+    /// Prevents accumulating too much funds per single request fulfillment in the future.
+    /// @dev To withdraw larger amounts, it's recommended to split it to several requests
+    uint256 public constant MAX_STETH_WITHDRAWAL_AMOUNT = 1_000 * 10 ** 18;
+
     address public swapManager;
     IStETH public STETH; //strategy token
     address public WETH9; //swap token for uniV3
@@ -72,15 +80,9 @@ contract LidoStEthStrategy is Strategy {
      * @param _amount The amount of stETH to withdraw
      * @return actualAmount The actual amount of ETH withdrawn
      */
-    function _instantWithdraw(uint256 _amount, bool isClear) internal returns (uint256 actualAmount) {
+    function _instantWithdraw(uint256 _amount) internal returns (uint256 actualAmount) {
         // swap stEth for eth
         actualAmount = _swapUsingFairQuote(_amount);
-        uint256 share = STETH.sharesOf(address(this));
-
-        if (isClear && share > 0) {
-            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
-            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
-        }
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
@@ -175,18 +177,47 @@ contract LidoStEthStrategy is Strategy {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
         if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
 
+        // default to the MIN_STETH_WITHDRAWAL_AMOUNT if the requested withdrawal amount is less than the minimum.
+        if (MIN_STETH_WITHDRAWAL_AMOUNT > _ethAmount) _ethAmount = MIN_STETH_WITHDRAWAL_AMOUNT;
+
         //approve steth for WithdrawalQueueERC721
         TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
 
-        uint256[] memory requestedAmounts = new uint256[](1);
-        requestedAmounts[0] = _ethAmount;
+        uint256 remainingBalance = _ethAmount;
+        uint256 batchLen = (_ethAmount / MAX_STETH_WITHDRAWAL_AMOUNT) + 1;
+        uint256[] memory requestedAmounts = new uint256[](batchLen);
+        uint256 index;
+
+        while (remainingBalance != 0) {
+            if (remainingBalance > MAX_STETH_WITHDRAWAL_AMOUNT) {
+                requestedAmounts[index] = MAX_STETH_WITHDRAWAL_AMOUNT;
+            } else {
+                requestedAmounts[index] = remainingBalance;
+            }
+            unchecked {
+                remainingBalance -= requestedAmounts[index];
+                index++;
+            }
+        }
+
+        // reset the array length to remove empty values
+        assembly {
+            mstore(requestedAmounts, index)
+        }
 
         //raise a withdraw request to WithdrawalQueueERC721
         uint256[] memory ids = stETHWithdrawalQueue.requestWithdrawals(requestedAmounts, address(this));
-        if (ids.length == 0) revert Strategy__LidoRequestWithdraw();
+
+        uint256 idsLen = ids.length;
+        if (idsLen == 0) revert Strategy__LidoRequestWithdraw();
 
         // push the withdraw request id
-        withdrawQueue.add(ids[0]);
+        for (uint256 i = 0; i < idsLen;) {
+            withdrawQueue.add(ids[i]);
+            unchecked {
+                i++;
+            }
+        }
 
         actualAmount = _ethAmount;
         if (address(this).balance > 0) {
@@ -254,7 +285,7 @@ contract LidoStEthStrategy is Strategy {
      */
     function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
         if (_amount == 0) return 0;
-        actualAmount = _instantWithdraw(_amount, false);
+        actualAmount = _instantWithdraw(_amount);
     }
 
     /**
@@ -266,7 +297,14 @@ contract LidoStEthStrategy is Strategy {
         uint256 balance = STETH.balanceOf(address(this));
         // if stEth shares is zero return actualAmount = 0
         if (balance == 0) return 0;
-        amount = _instantWithdraw(balance, true);
+        amount = _instantWithdraw(balance);
+
+        // Transfer left over dust shares to the asset vault
+        uint256 share = STETH.sharesOf(address(this));
+        if (share > 0) {
+            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
+        }
     }
 
     /**
