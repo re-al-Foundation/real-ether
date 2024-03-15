@@ -44,6 +44,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
     uint256 internal constant MAXMIUM_FEE_RATE = ONE_HUNDRED_PERCENT / 100; // 1%
     uint256 internal constant MINIMUM_REBASE_INTERVAL = 60 * 60; // 1hour
+    uint256 internal constant NUMBER_OF_DEAD_SHARES = 10 ** 15;
 
     uint256 public rebaseTimeInterval = 24 * 60 * 60; // 1 day
     uint256 public rebaseTime;
@@ -119,6 +120,10 @@ contract RealVault is ReentrancyGuard, Ownable {
         real = IMinter(_minter).real();
         rebaseTime = block.timestamp;
         withdrawFeeRate = 0;
+       
+        // mint dead
+        // TransferHelper.safeTransferETH(assetsVault, NUMBER_OF_DEAD_SHARES);
+        // IMinter(minter).mint(address(0xdead), NUMBER_OF_DEAD_SHARES);
     }
 
     /**
@@ -224,7 +229,6 @@ contract RealVault is ReentrancyGuard, Ownable {
      */
     function instantWithdraw(uint256 _amount, uint256 _shares)
         external
-        payable
         nonReentrant
         returns (uint256 actualWithdrawn)
     {
@@ -311,8 +315,9 @@ contract RealVault is ReentrancyGuard, Ownable {
     /**
      * @dev Transition to the next round, managing vault balances and share prices.
      */
-    function rollToNextRound() external {
+    function rollToNextRound() external nonReentrant {
         if (block.timestamp < rebaseTime + rebaseTimeInterval) revert RealVault__NotReady();
+        rebaseTime = block.timestamp;
 
         IStrategyManager manager = IStrategyManager(strategyManager);
         IAssetsVault aVault = IAssetsVault(assetsVault);
@@ -345,8 +350,6 @@ contract RealVault is ReentrancyGuard, Ownable {
         withdrawableAmountInPast =
             withdrawableAmountInPast + ShareMath.sharesToAsset(withdrawingSharesInRound, newSharePrice);
         withdrawingSharesInRound = 0;
-        rebaseTime = block.timestamp;
-
         emit RollToNextRound(latestRoundID, vaultIn, vaultOut, newSharePrice);
     }
 
@@ -358,6 +361,13 @@ contract RealVault is ReentrancyGuard, Ownable {
         IMinter(minter).setNewVault(_vault);
         IAssetsVault(assetsVault).setNewVault(_vault);
         IStrategyManager(strategyManager).setNewVault(_vault);
+
+        // migrate pending withdrawals by transferring any real token balance held by the contract
+        // to the new implementation which should manually migrate userReceipts entries.
+        IReal realToken = IReal(real);
+        uint256 balance = realToken.balanceOf(address(this));
+        if (balance > 0) TransferHelper.safeTransfer(real, _vault, balance);
+
         emit VaultMigrated(address(this), _vault);
     }
 
@@ -421,15 +431,12 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     // [INTERNAL FUNCTIONS]
-
     function _depositFor(address caller, address receiver, uint256 assets) internal returns (uint256 mintAmount) {
         if (assets == 0) revert RealVault__InvalidAmount();
 
-        mintAmount = previewDeposit(assets); // shares amount to be minted
-
+        mintAmount = previewDeposit(address(this).balance); // shares amount to be minted
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
         IMinter(minter).mint(receiver, mintAmount);
-
         emit Deposit(caller, receiver, assets, mintAmount);
     }
 
