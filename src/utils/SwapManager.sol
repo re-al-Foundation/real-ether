@@ -15,7 +15,6 @@ error SwapManager__SlippageNotSet();
 error SwapManager__ZeroAddress();
 error SwapManager__NoLiquidity();
 error SwapManager__InvalidPoolToken();
-error SwapManager__NotLidoStEthStrategy();
 error SwapManager__NoPool(address tokenIn);
 error SwapManager__MIN_TWAP_DURATION(uint32 duration);
 error SwapManager__ExceedPercentage(uint256 given, uint256 max);
@@ -31,15 +30,14 @@ contract SwapManager is Ownable {
     uint256 internal constant ZERO = 0;
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
-    uint32 public constant MIN_TWAP_DURATION = 36_00;
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
+    uint32 public constant MIN_TWAP_DURATION = 3_600;
+    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint32 public twapDuration;
 
-    address NULL;
-    address WETH9;
-    address v3SwapRouter;
-    address lidoStEthStrategy;
+    address public NULL;
+    address public WETH9;
+    address public v3SwapRouter;
 
     // token => pool
     mapping(address => address) public v3Pools;
