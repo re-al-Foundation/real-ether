@@ -32,9 +32,9 @@ contract Minter {
         IReal(real).burn(_from, _amount);
     }
 
-    function setNewVault(address _vault) external onlyVault {
+    function setNewVault(address payable _vault) external onlyVault {
         emit VaultUpdated(vault, _vault);
-        vault = payable(_vault);
+        vault = _vault;
     }
 
     function getTokenPrice() public view returns (uint256 price) {
