@@ -33,9 +33,8 @@ contract Minter {
     }
 
     function setNewVault(address _vault) external onlyVault {
-        address _oldRealVault = vault;
+        emit VaultUpdated(vault, _vault);
         vault = payable(_vault);
-        emit VaultUpdated(_oldRealVault, _vault);
     }
 
     function getTokenPrice() public view returns (uint256 price) {
