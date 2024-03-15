@@ -3,6 +3,9 @@ pragma solidity =0.8.21;
 
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {IERC20} from "oz/token/ERC20/IERC20.sol";
+import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
+
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {ICurvePool} from "../interfaces/ICurvePool.sol";
@@ -22,6 +25,8 @@ error SwapManager__SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 contract SwapManager is Ownable {
+    using SafeERC20 for IERC20;
+
     enum DEX {
         Uniswap,
         Curve
@@ -97,7 +102,8 @@ contract SwapManager is Ownable {
         uint24 poolFee = IUniswapV3Pool(pool).fee();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        TransferHelper.safeApprove(tokenIn, v3SwapRouter, amountIn);
+        // TransferHelper.forceApprove(tokenIn, v3SwapRouter, amountIn);
+        IERC20(tokenIn).forceApprove(v3SwapRouter, amountIn);
         amountOut = ISwapRouter(v3SwapRouter).exactInputSingle(
             ISwapRouter.ExactInputSingleParams(
                 tokenIn, WETH9, poolFee, address(this), deadline, amountIn, amountOutMinimum, 0
@@ -107,7 +113,9 @@ contract SwapManager is Ownable {
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
         uint256 weth9Balance = IWETH9(WETH9).balanceOf(address(this));
         if (weth9Balance > 0) IWETH9(WETH9).withdraw(weth9Balance);
-        TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+
+        amountOut = address(this).balance;
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
 
     /**
@@ -123,11 +131,14 @@ contract SwapManager is Ownable {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        TransferHelper.safeApprove(tokenIn, pool, amountIn);
+        // TransferHelper.forceApprove(tokenIn, pool, amountIn);
+        IERC20(tokenIn).forceApprove(pool, amountIn);
 
         (int128 _inIdx, int128 _outIdx) = _getCurveTokenIndex(pool, tokenIn);
         amountOut = ICurvePool(pool).exchange(_inIdx, _outIdx, amountIn, amountOutMinimum);
-        TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+
+        amountOut = address(this).balance;
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
 
     // [internal functions]
