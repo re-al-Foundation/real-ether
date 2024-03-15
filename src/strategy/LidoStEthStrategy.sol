@@ -65,7 +65,7 @@ contract LidoStEthStrategy is Strategy {
     ) Strategy(_manager, _name) {
         if (
             _stETHAdress == address(0) || _stETHWithdrawal == address(0) || _wstETHAdress == address(0)
-                || _weth9 == address(0) || _swapManager == address(0) || _manager == address(0)
+                || _weth9 == address(0) || _swapManager == address(0)
         ) revert Strategy__ZeroAddress();
 
         STETH = IStETH(_stETHAdress);
