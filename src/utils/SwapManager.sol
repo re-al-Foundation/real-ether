@@ -118,7 +118,7 @@ contract SwapManager is Ownable {
         (address token0, address token1) = _getCurvPoolTokens(pool);
         address tokenOut = token0 == tokenIn ? token1 : token0;
 
-        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn, tokenOut);
+        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn);
         uint256 amountOutMinimum = getMinimumAmount(tokenOut, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
@@ -197,7 +197,7 @@ contract SwapManager is Ownable {
     function getFairQuote(uint256 amountIn, address tokenIn) public view returns (DEX dexType, uint256 amountOut) {
         // estimate price using the twap
         uint256 v3Out = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
-        uint256 curveOut = estimateCurveAmountOut(uint128(amountIn), tokenIn, NULL);
+        uint256 curveOut = estimateCurveAmountOut(uint128(amountIn), tokenIn);
         if (v3Out == 0 && curveOut == 0) revert SwapManager__NoLiquidity();
         return v3Out > curveOut ? (DEX.Uniswap, v3Out) : (DEX.Curve, curveOut);
     }
@@ -209,11 +209,7 @@ contract SwapManager is Ownable {
      * @param tokenIn The address of the input token
      * @return amountOut The estimated amount of output tokens
      */
-    function estimateCurveAmountOut(uint256 amountIn, address tokenIn, address)
-        public
-        view
-        returns (uint256 amountOut)
-    {
+    function estimateCurveAmountOut(uint256 amountIn, address tokenIn) public view returns (uint256 amountOut) {
         address pool = _getCurvePool(tokenIn);
         (int128 i, int128 j) = _getCurveTokenIndex(pool, tokenIn);
         amountOut = ICurvePool(pool).get_dy(i, j, amountIn);

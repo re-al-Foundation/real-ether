@@ -94,7 +94,7 @@ contract LidoStEthStrategy is Strategy {
     function _swapUsingFairQuote(uint256 _amountIn) internal returns (uint256 actualAmount) {
         uint256 amountInForV3 = IWStETH(WSTETH).getWstETHByStETH(_amountIn);
         uint256 v3Out = ISwapManager(swapManager).estimateV3AmountOut(uint128(amountInForV3), WSTETH, WETH9);
-        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH), WETH9);
+        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH));
 
         if (v3Out == 0 && curveOut == 0) revert Strategy__ZeroPoolLiquidity();
 
