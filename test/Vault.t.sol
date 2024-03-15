@@ -48,6 +48,7 @@ contract VaultTest is Test {
         assetVaultAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 3);
         strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 5);
 
+        // deal(realVaultAddress, 0.001 ether);
         real = new Real(minterAddress);
         minter = new Minter(address(real), payable(realVaultAddress));
         realVault = new RealVault(
@@ -57,8 +58,7 @@ contract VaultTest is Test {
             payable(strategyManagerAddress),
             address(proposal.addr)
         );
-        assetsVault = new AssetsVault(address(realVault), strategyManagerAddress);
-
+        assetsVault = new AssetsVault(realVaultAddress, strategyManagerAddress);
         address[] memory strategies = new address[](1);
         uint256[] memory ratios = new uint256[](1);
 
