@@ -36,7 +36,7 @@ contract AssetsVault {
      */
     constructor(address _realVault, address _strategyManager) {
         if (_realVault == address(0) || _strategyManager == address(0)) revert AssetsVault__ZeroAddress();
-        
+
         realVault = _realVault;
         strategyManager = _strategyManager;
     }

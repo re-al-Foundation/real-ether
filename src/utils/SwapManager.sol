@@ -5,6 +5,7 @@ import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {Ownable} from "oz/access/Ownable.sol";
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "oz/utils/math/SafeCast.sol";
 
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
@@ -26,6 +27,7 @@ error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 contract SwapManager is Ownable {
     using SafeERC20 for IERC20;
+    using SafeCast for uint256;
 
     enum DEX {
         Uniswap,
@@ -38,6 +40,8 @@ contract SwapManager is Ownable {
     uint32 public constant MIN_TWAP_DURATION = 3_600;
     uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
+    uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
+
     uint32 public twapDuration;
 
     address public NULL;
@@ -93,7 +97,8 @@ contract SwapManager is Ownable {
      */
     function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         // estimate price using the twap
-        uint256 quoteOut = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
+        uint128 amountInUint128 = amountIn.toUint128();
+        uint256 quoteOut = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
         uint256 amountOutMinimum = getMinimumAmount(WETH9, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
@@ -162,7 +167,8 @@ contract SwapManager is Ownable {
 
     function getMinimumAmount(address token, uint256 amount) public view returns (uint256) {
         if (slippage[token] == 0) revert SwapManager__SlippageNotSet();
-        return (amount * slippage[token]) / ONE_HUNDRED_PERCENT;
+        uint256 oneMinusSlippage = ONE_HUNDRED_PERCENT - slippage[token];
+        return (amount * oneMinusSlippage) / ONE_HUNDRED_PERCENT;
     }
 
     function _getCurvPoolTokens(address pool) internal view returns (address token0, address token1) {
@@ -207,8 +213,9 @@ contract SwapManager is Ownable {
      */
     function getFairQuote(uint256 amountIn, address tokenIn) public view returns (DEX dexType, uint256 amountOut) {
         // estimate price using the twap
-        uint256 v3Out = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
-        uint256 curveOut = estimateCurveAmountOut(uint128(amountIn), tokenIn);
+        uint128 amountInUint128 = amountIn.toUint128();
+        uint256 v3Out = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
+        uint256 curveOut = estimateCurveAmountOut(amountInUint128, tokenIn);
         if (v3Out == 0 && curveOut == 0) revert SwapManager__NoLiquidity();
         return v3Out > curveOut ? (DEX.Uniswap, v3Out) : (DEX.Curve, curveOut);
     }
@@ -249,7 +256,10 @@ contract SwapManager is Ownable {
         // 56 = 24 + 32
         (int56[] memory tickCumulatives,) = IUniswapV3Pool(pool).observe(secondsAgos);
 
-        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
+        int56 tickCumulativesDelta;
+        unchecked {
+            tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
+        }
 
         // int56 / uint32 = int24
         int24 tick = int24(tickCumulativesDelta / int32(secondsAgo));
@@ -266,7 +276,9 @@ contract SwapManager is Ownable {
         down
         */
         if (tickCumulativesDelta < 0 && (tickCumulativesDelta % int32(secondsAgo) != 0)) {
-            tick--;
+            unchecked {
+                tick--;
+            }
         }
 
         amountOut = _getQuoteAtTick(tick, amountIn, tokenIn, tokenOut);
@@ -282,12 +294,12 @@ contract SwapManager is Ownable {
      */
     function setWhitelistV3Pool(address _token, address _pool, uint24 _slippage) external onlyOwner {
         if (_token == address(0) || _pool == address(0)) revert SwapManager__ZeroAddress();
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
 
         (address token0, address token1) = (IUniswapV3Pool(_pool).token0(), IUniswapV3Pool(_pool).token1());
-        if ((token0 != WETH9 && token1 != WETH9) || ((token0 != _token && token1 != _token))) {
-            revert SwapManager__InvalidPoolToken();
-        }
+
+        if ((token0 != _token && token0 != WETH9)) revert SwapManager__InvalidPoolToken();
+        if ((token1 != _token && token1 != WETH9)) revert SwapManager__InvalidPoolToken();
 
         v3Pools[_token] = _pool;
         slippage[_token] = _slippage;
@@ -302,12 +314,12 @@ contract SwapManager is Ownable {
      */
     function setWhitelistCurvePool(address _token, address _pool, uint24 _slippage) external onlyOwner {
         if (_token == address(0) || _pool == address(0)) revert SwapManager__ZeroAddress();
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
 
         (address token0, address token1) = _getCurvPoolTokens(_pool);
-        if ((token0 != NULL && token1 != NULL) || ((token0 != _token && token1 != _token))) {
-            revert SwapManager__InvalidPoolToken();
-        }
+
+        if ((token0 != _token && token0 != NULL)) revert SwapManager__InvalidPoolToken();
+        if ((token1 != _token && token1 != NULL)) revert SwapManager__InvalidPoolToken();
 
         curvePools[_token] = _pool;
         slippage[_token] = _slippage;
@@ -320,7 +332,7 @@ contract SwapManager is Ownable {
      * @param _slippage The slippage tolerance for the token
      */
     function setTokenSlippage(address _token, uint24 _slippage) external onlyOwner {
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
         slippage[_token] = _slippage;
         emit TokenSlippageUpdated(_token, _slippage);
     }

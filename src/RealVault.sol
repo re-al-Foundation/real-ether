@@ -119,11 +119,10 @@ contract RealVault is ReentrancyGuard, Ownable {
 
         real = IMinter(_minter).real();
         rebaseTime = block.timestamp;
-       
+
         // mint dead
         // TransferHelper.safeTransferETH(assetsVault, NUMBER_OF_DEAD_SHARES);
         // IMinter(minter).mint(address(0xdead), NUMBER_OF_DEAD_SHARES);
-
     }
 
     /**

@@ -116,10 +116,10 @@ contract LidoStrategyTest is Test {
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
 
         swapManager = new SwapManager(address(this), WETH9, NULL, 0xE592427A0AEce92De3Edee1F18E0157C05861564);
-        swapManager.setWhitelistV3Pool(wstETHAdress, wstETH_ETH, 1000_000);
-        swapManager.setWhitelistCurvePool(stETHAdress, stETH_ETH, 1000_000);
-        swapManager.setTokenSlippage(WETH9, 995_000);
-        swapManager.setTokenSlippage(NULL, 995_000);
+        swapManager.setWhitelistV3Pool(wstETHAdress, wstETH_ETH, 0);
+        swapManager.setWhitelistCurvePool(stETHAdress, stETH_ETH, 0);
+        swapManager.setTokenSlippage(WETH9, 5_00_00); // 5%
+        swapManager.setTokenSlippage(NULL, 5_00_00); // 5%
 
         testEthStrategy = new TestEthStrategy(payable(strategyManagerAddress), "Mock Eth Investment");
 
