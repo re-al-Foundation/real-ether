@@ -358,6 +358,14 @@ contract LidoStEthStrategy is Strategy {
     }
 
     /**
+     * @notice Retrieves the withdrawal request ids
+     * @return requestIdsLength An array size of withdrawal request IDs
+     */
+    function getRequestIdsLen() public view returns (uint256 requestIdsLength) {
+        return withdrawQueue.length();
+    }
+
+    /**
      * @notice Retrieves the withdrawal status of stETH requests
      * @return requestIds An array of withdrawal request IDs
      * @return statuses An array of withdrawal request statuses
