@@ -168,7 +168,7 @@ contract SwapManager is Ownable {
     function getMinimumAmount(address token, uint256 amount) public view returns (uint256) {
         if (slippage[token] == 0) revert SwapManager__SlippageNotSet();
         uint256 oneMinusSlippage = ONE_HUNDRED_PERCENT - slippage[token];
-        return (amount * oneMinusSlippage) / ONE_HUNDRED_PERCENT;
+        return FullMath.mulDiv(amount, oneMinusSlippage, ONE_HUNDRED_PERCENT);
     }
 
     function _getCurvPoolTokens(address pool) internal view returns (address token0, address token1) {

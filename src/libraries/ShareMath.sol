@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
+import {FullMath} from "./FullMath.sol";
 
 library ShareMath {
     uint256 internal constant decimals = 18;
@@ -7,11 +8,11 @@ library ShareMath {
 
     function assetToShares(uint256 assetAmount, uint256 assetPerShare) internal pure returns (uint256) {
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return (assetAmount * 10 ** decimals) / assetPerShare;
+        return FullMath.mulDiv(assetAmount, 10 ** decimals, assetPerShare);
     }
 
     function sharesToAsset(uint256 shares, uint256 assetPerShare) internal pure returns (uint256) {
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return (shares * assetPerShare) / 10 ** decimals;
+        return FullMath.mulDiv(shares, assetPerShare, 10 ** decimals);
     }
 }
