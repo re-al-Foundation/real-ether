@@ -2,7 +2,8 @@
 pragma solidity =0.8.21;
 
 library ShareMath {
-    uint256 internal constant decimals = 18;
+    uint256 internal constant _decimals = 18;
+    uint256 internal constant _decimalOffset = 10 ** _decimals;
     uint256 internal constant PLACEHOLDER_UINT = 1;
 
     function assetToShares(uint256 assetAmount, uint256 assetPerShare) internal pure returns (uint256) {
@@ -10,7 +11,7 @@ library ShareMath {
         // which should never happen.
         // Has to be larger than 1 because `1` is used in `initRoundPricePerShares` to prevent cold writes.
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return (assetAmount * 10 ** decimals) / assetPerShare;
+        return (assetAmount * _decimalOffset) / assetPerShare;
     }
 
     function sharesToAsset(uint256 shares, uint256 assetPerShare) internal pure returns (uint256) {
@@ -18,6 +19,6 @@ library ShareMath {
         // which should never happen.
         // Has to be larger than 1 because `1` is used in `initRoundPricePerShares` to prevent cold writes.
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return (shares * assetPerShare) / 10 ** decimals;
+        return (shares * assetPerShare) / _decimalOffset;
     }
 }
