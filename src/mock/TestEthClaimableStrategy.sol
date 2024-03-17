@@ -22,7 +22,7 @@ contract TestEthClaimableStrategy is Strategy {
 
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert TestEthClaimableStrategy__ZeroAmount();
-        if (_ethAmount > getAllValue()) revert TestEthClaimableStrategy__InsufficientBalance();
+        if (_ethAmount > getTotalValue()) revert TestEthClaimableStrategy__InsufficientBalance();
         // Mock: On withdraw request will be raised to initiate withdraw from the strategy protocol
         // amount can be claimed after approval by the strategy protocol
         pendingReserve += _ethAmount;
@@ -49,7 +49,7 @@ contract TestEthClaimableStrategy is Strategy {
         amount = address(this).balance - getPendingValue();
     }
 
-    function getAllValue() public view override returns (uint256 value) {
+    function getTotalValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 

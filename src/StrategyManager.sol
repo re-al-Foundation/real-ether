@@ -168,7 +168,9 @@ contract StrategyManager {
 
             actualAmount = balanceBeforeRepay;
         } else {
-            actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+            unchecked {
+                actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+            }
         }
     }
 
@@ -233,12 +235,19 @@ contract StrategyManager {
             uint256 position = getStrategyValidValue(strategy);
 
             if (newPosition < position) {
-                snapshots[head] = StrategySnapshot(strategy, false, position - newPosition);
-                head++;
+                unchecked {
+                    snapshots[head] = StrategySnapshot(strategy, false, position - newPosition);
+                    head++;
+                }
             } else if (newPosition > position) {
-                snapshots[tail] = StrategySnapshot(strategy, true, newPosition - position);
+                unchecked {
+                    snapshots[tail] = StrategySnapshot(strategy, true, newPosition - position);
+                }
+
                 if (tail != 0) {
-                    tail--;
+                    unchecked {
+                        tail--;
+                    }
                 }
             }
         }

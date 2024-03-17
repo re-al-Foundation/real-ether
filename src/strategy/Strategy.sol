@@ -71,7 +71,7 @@ abstract contract Strategy {
      * @dev Get all value function to get the total value of assets held in the strategy.
      * @return value The total value of assets held in the strategy.
      */
-    function getAllValue() public virtual returns (uint256 value) {}
+    function getTotalValue() public virtual returns (uint256 value) {}
 
     /**
      * @dev Get pending value function to get the pending value of assets in the strategy.
