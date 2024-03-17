@@ -391,7 +391,7 @@ contract StrategyManager {
      * @return status A boolean indicating whether the strategy can be destroyed.
      */
     function _couldDestroyStrategy(address _strategy) internal view returns (bool status) {
-        return ratios[_strategy] == 0 && IStrategy(_strategy).getAllValue() < DUST;
+        return ratios[_strategy] == 0 && IStrategy(_strategy).getTotalValue() < DUST;
     }
 
     // [View Functions]
@@ -402,7 +402,7 @@ contract StrategyManager {
      * @return _value The total value of the strategy.
      */
     function getStrategyValue(address _strategy) public view returns (uint256 _value) {
-        return IStrategy(_strategy).getAllValue();
+        return IStrategy(_strategy).getTotalValue();
     }
 
     /**
