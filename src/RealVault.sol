@@ -120,8 +120,10 @@ contract RealVault is ReentrancyGuard, Ownable {
         rebaseTime = block.timestamp;
 
         // mint dead
-        // TransferHelper.safeTransferETH(assetsVault, NUMBER_OF_DEAD_SHARES);
-        // IMinter(minter).mint(address(0xdead), NUMBER_OF_DEAD_SHARES);
+        // if (IReal(real).totalSupply() == 0) {
+        //     TransferHelper.safeTransferETH(assetsVault, NUMBER_OF_DEAD_SHARES);
+        //     IMinter(minter).mint(address(0xdead), NUMBER_OF_DEAD_SHARES);
+        // }
     }
 
     /**
@@ -400,7 +402,7 @@ contract RealVault is ReentrancyGuard, Ownable {
 
     /**
      * @dev Clear a strategy from the vault.
-     * Funds will be returned to the asset valut from the strategy
+     * Invested funds will be returned to the asset valut from the strategy
      * @param _strategy Address of the strategy to clear.
      */
     function clearStrategy(address _strategy) external onlyOwner {
