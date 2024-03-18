@@ -164,24 +164,22 @@ contract RealVault is ReentrancyGuard, Ownable {
         IMinter realEthMinter = IMinter(minter);
 
         if (realToken.balanceOf(msg.sender) < _shares) revert RealVault__ExceedBalance();
-
         TransferHelper.safeTransferFrom(real, msg.sender, address(this), _shares);
 
         withdrawingSharesInRound = withdrawingSharesInRound + _shares;
-
-        WithdrawReceipt storage receipt = userReceipts[msg.sender];
-        WithdrawReceipt memory mReceipt = receipt;
+        WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
 
         if (mReceipt.withdrawRound == _latestRoundID) {
-            receipt.withdrawShares = mReceipt.withdrawShares + _shares;
+            mReceipt.withdrawShares = mReceipt.withdrawShares + _shares;
         } else if (mReceipt.withdrawRound == 0) {
-            receipt.withdrawShares = _shares;
-            receipt.withdrawRound = _latestRoundID;
+            mReceipt.withdrawShares = _shares;
+            mReceipt.withdrawRound = _latestRoundID;
         } else {
             // Withdraw previous round share first
-            _updateUserReceipt(receipt, mReceipt, realEthMinter, _shares, _latestRoundID);
+            mReceipt = _updateUserReceipt(mReceipt, realEthMinter, _shares, _latestRoundID);
         }
 
+        userReceipts[msg.sender] = mReceipt;
         emit InitiateWithdraw(msg.sender, _shares, _latestRoundID);
     }
 
@@ -192,9 +190,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     function cancelWithdraw(uint256 _shares) external nonReentrant {
         if (_shares == 0) revert RealVault__InvalidAmount();
 
-        WithdrawReceipt storage receipt = userReceipts[msg.sender];
-        WithdrawReceipt memory mReceipt = receipt;
-
+        WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
         uint256 _latestRoundID = latestRoundID;
 
         if (mReceipt.withdrawRound != _latestRoundID) revert RealVault__NoRequestFound();
@@ -203,15 +199,16 @@ contract RealVault is ReentrancyGuard, Ownable {
         }
 
         unchecked {
-            receipt.withdrawShares = mReceipt.withdrawShares - _shares;
+            mReceipt.withdrawShares -= _shares;
         }
 
         TransferHelper.safeTransfer(real, msg.sender, _shares);
 
-        if (receipt.withdrawShares == 0) {
-            receipt.withdrawRound = 0;
+        if (mReceipt.withdrawShares == 0) {
+            mReceipt.withdrawRound = 0;
         }
 
+        userReceipts[msg.sender] = mReceipt;
         withdrawingSharesInRound = withdrawingSharesInRound - _shares;
 
         emit CancelWithdraw(msg.sender, _shares, _latestRoundID);
@@ -237,20 +234,20 @@ contract RealVault is ReentrancyGuard, Ownable {
         (uint256 idleAmount,) = getVaultAvailableAmount();
 
         if (_amount != 0) {
-            WithdrawReceipt storage receipt = userReceipts[msg.sender];
-            WithdrawReceipt memory mReceipt = receipt;
+            WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
 
             if (mReceipt.withdrawRound != _latestRoundID && mReceipt.withdrawRound != 0) {
                 // Withdraw previous round share first
-                _updateUserReceipt(receipt, mReceipt, realEthMinter, 0, 0);
+                mReceipt = _updateUserReceipt(mReceipt, realEthMinter, 0, 0);
             }
 
-            mReceipt = receipt;
             if (mReceipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
 
             unchecked {
-                receipt.withdrawableAmount = mReceipt.withdrawableAmount - _amount;
+                mReceipt.withdrawableAmount -= _amount;
             }
+
+            userReceipts[msg.sender] = mReceipt;
 
             withdrawableAmountInPast = withdrawableAmountInPast - _amount;
             actualWithdrawn = _amount;
@@ -549,21 +546,23 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     function _updateUserReceipt(
-        WithdrawReceipt storage receipt,
         WithdrawReceipt memory mReceipt,
         IMinter realEthMinter,
         uint256 _shares,
         uint256 _latestRoundID
-    ) private {
+    ) private returns (WithdrawReceipt memory) {
         uint256 withdrawAmount =
             ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
+        console2.log(withdrawAmount);
 
         realEthMinter.burn(address(this), mReceipt.withdrawShares);
         withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
 
-        receipt.withdrawShares = _shares;
-        receipt.withdrawableAmount = mReceipt.withdrawableAmount + withdrawAmount;
-        receipt.withdrawRound = _latestRoundID;
+        mReceipt.withdrawShares = _shares;
+        mReceipt.withdrawableAmount = mReceipt.withdrawableAmount + withdrawAmount;
+
+        mReceipt.withdrawRound = _latestRoundID;
+        return mReceipt;
     }
 
     receive() external payable {}
