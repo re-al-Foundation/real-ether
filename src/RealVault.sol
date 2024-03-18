@@ -397,7 +397,7 @@ contract RealVault is ReentrancyGuard, Ownable {
 
     /**
      * @dev Clear a strategy from the vault.
-     * Funds will be returned to the asset valut from the strategy
+     * Invested funds will be returned to the asset valut from the strategy
      * @param _strategy Address of the strategy to clear.
      */
     function clearStrategy(address _strategy) external onlyOwner {
