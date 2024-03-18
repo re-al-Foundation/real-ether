@@ -66,7 +66,7 @@ contract TestEthStrategyTest is Test {
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
 
         epoch0 = block.timestamp;
-        
+
         vm.startPrank(address(0xdead));
         realVault.instantWithdraw(0, 0.001 ether);
         vm.stopPrank();

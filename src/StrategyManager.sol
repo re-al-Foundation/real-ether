@@ -241,13 +241,15 @@ contract StrategyManager {
 
             if (newPosition < position) {
                 unchecked {
-                    snapshots[head] = StrategySnapshot(strategy, false, position - newPosition);
+                    snapshots[head] =
+                        StrategySnapshot({strategy: strategy, isDeposit: false, amount: position - newPosition});
                     head++;
                 }
             } else if (newPosition > position) {
                 unchecked {
                     tail--;
-                    snapshots[tail] = StrategySnapshot(strategy, true, newPosition - position);
+                    snapshots[tail] =
+                        StrategySnapshot({strategy: strategy, isDeposit: true, amount: newPosition - position});
                 }
             }
 
@@ -257,7 +259,6 @@ contract StrategyManager {
         }
 
         // update the strategy invested value based on latest position
-        length = snapshots.length;
         for (uint256 i; i < length;) {
             StrategySnapshot memory snapshot = snapshots[i];
 

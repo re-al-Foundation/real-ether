@@ -175,10 +175,10 @@ contract LidoStEthStrategy is Strategy {
      */
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
-        if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
-
         // default to the MIN_STETH_WITHDRAWAL_AMOUNT if the requested withdrawal amount is less than the minimum.
-        if (MIN_STETH_WITHDRAWAL_AMOUNT > _ethAmount) _ethAmount = MIN_STETH_WITHDRAWAL_AMOUNT;
+        if (_ethAmount < MIN_STETH_WITHDRAWAL_AMOUNT) _ethAmount = MIN_STETH_WITHDRAWAL_AMOUNT;
+
+        if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
 
         //approve steth for WithdrawalQueueERC721
         TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
@@ -232,7 +232,7 @@ contract LidoStEthStrategy is Strategy {
      * which is 365 requests in a year for a 1-day epoch cycle or 52 requests in a year for a 7-day epoch cycle
      * If the queue expands to a level where withdrawQueue consumes excessive gas, use claimAllPendingAssetsByIds instead.
      */
-    function claimAllPendingAssets() external  override{
+    function claimAllPendingAssets() external override {
         uint256[] memory withdrawIds = withdrawQueue.values();
         (uint256[] memory ids,,) = checkPendingAssets(withdrawIds);
 

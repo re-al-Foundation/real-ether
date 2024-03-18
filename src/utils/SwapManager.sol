@@ -108,7 +108,6 @@ contract SwapManager is Ownable {
         uint24 poolFee = IUniswapV3Pool(pool).fee();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        // TransferHelper.forceApprove(tokenIn, v3SwapRouter, amountIn);
         IERC20(tokenIn).forceApprove(v3SwapRouter, amountIn);
         amountOut = ISwapRouter(v3SwapRouter).exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
@@ -147,7 +146,6 @@ contract SwapManager is Ownable {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        // TransferHelper.forceApprove(tokenIn, pool, amountIn);
         IERC20(tokenIn).forceApprove(pool, amountIn);
 
         (int128 _inIdx, int128 _outIdx) = _getCurveTokenIndex(pool, tokenIn);
@@ -309,8 +307,8 @@ contract SwapManager is Ownable {
 
         (address token0, address token1) = (IUniswapV3Pool(_pool).token0(), IUniswapV3Pool(_pool).token1());
 
-        if ((token0 != _token && token0 != WETH9)) revert SwapManager__InvalidPoolToken();
-        if ((token1 != _token && token1 != WETH9)) revert SwapManager__InvalidPoolToken();
+        if (token0 != _token && token0 != WETH9) revert SwapManager__InvalidPoolToken();
+        if (token1 != _token && token1 != WETH9) revert SwapManager__InvalidPoolToken();
 
         v3Pools[_token] = _pool;
         slippage[_token] = _slippage;
@@ -329,8 +327,8 @@ contract SwapManager is Ownable {
 
         (address token0, address token1) = _getCurvPoolTokens(_pool);
 
-        if ((token0 != _token && token0 != NULL)) revert SwapManager__InvalidPoolToken();
-        if ((token1 != _token && token1 != NULL)) revert SwapManager__InvalidPoolToken();
+        if (token0 != _token && token0 != NULL) revert SwapManager__InvalidPoolToken();
+        if (token1 != _token && token1 != NULL) revert SwapManager__InvalidPoolToken();
 
         curvePools[_token] = _pool;
         slippage[_token] = _slippage;
