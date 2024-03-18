@@ -68,4 +68,8 @@ contract TestEthClaimableStrategy is Strategy {
     function getClaimableAndPendingValue() public pure returns (uint256 value) {
         value = 0;
     }
+
+    function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
+
+    function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
 }

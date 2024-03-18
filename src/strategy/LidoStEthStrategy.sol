@@ -431,5 +431,7 @@ contract LidoStEthStrategy is Strategy {
         value = claimableValue + pendingValue;
     }
 
+    function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
+
     receive() external payable {}
 }
