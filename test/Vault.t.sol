@@ -121,188 +121,254 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    function test_requestWithdraw() public {
-        deal(user.addr, 10 ether);
-        vm.startPrank(user.addr);
+    function test_fuzzRequestWithdraw(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount);
+            vm.startPrank(userAddress);
 
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+            // Deposit in Round#0
+            realVault.deposit{value: amount}();
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
-        // roll epoch to next round
-        realVault.rollToNextRound();
+            // roll epoch to next round
+            realVault.rollToNextRound();
 
-        // Request Withraw in Round#0
-        uint256 bal = real.balanceOf(user.addr);
-        uint256 contractBal = real.balanceOf(address(realVault));
+            // Request Withraw in Round#0
+            uint256 bal = real.balanceOf(userAddress);
+            uint256 contractBal = real.balanceOf(address(realVault));
 
-        uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
-        real.approve(address(realVault), bal);
+            uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
+            real.approve(address(realVault), bal);
 
-        assertEq(bal, 1 ether);
-        (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(user.addr);
+            assertEq(bal, amount);
+            (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(userAddress);
 
-        assertEq(withdrawRound, 0);
-        assertEq(withdrawShares, 0);
+            assertEq(withdrawRound, 0);
+            assertEq(withdrawShares, 0);
 
-        realVault.requestWithdraw(bal);
-        (withdrawRound, withdrawShares,) = realVault.userReceipts(user.addr);
+            realVault.requestWithdraw(bal);
+            (withdrawRound, withdrawShares,) = realVault.userReceipts(userAddress);
 
-        assertEq(withdrawingSharesInRound + bal, realVault.withdrawingSharesInRound());
-        assertEq(withdrawRound, 1);
+            assertEq(withdrawingSharesInRound + bal, realVault.withdrawingSharesInRound());
+            assertEq(withdrawRound, 1);
 
-        assertEq(withdrawShares, bal);
-        assertEq(real.balanceOf(user.addr), 0);
+            assertEq(withdrawShares, bal);
+            assertEq(real.balanceOf(userAddress), 0);
 
-        assertEq(real.balanceOf(address(realVault)), contractBal + bal);
-        vm.stopPrank();
+            assertEq(real.balanceOf(address(realVault)), contractBal + bal);
+            vm.stopPrank();
+        }
     }
 
-    function test_requesMultiplytWithdrawsInSameRound() public {
-        deal(user.addr, 10 ether);
-        vm.startPrank(user.addr);
+    function test_fuzzRequesMultiplytWithdrawsInSameRound(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
 
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount * 2);
+            vm.startPrank(userAddress);
 
-        // roll epoch to next round
-        realVault.rollToNextRound();
-        uint256 bal = real.balanceOf(user.addr);
+            // Deposit in Round#0
+            realVault.deposit{value: amount * 2}();
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
-        uint256 contractBal = real.balanceOf(address(realVault));
-        uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
+            // roll epoch to next round
+            realVault.rollToNextRound();
+            uint256 bal = real.balanceOf(userAddress);
 
-        real.approve(address(realVault), bal);
-        realVault.requestWithdraw(bal / 2);
+            uint256 contractBal = real.balanceOf(address(realVault));
+            uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
 
-        (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 1);
+            real.approve(address(realVault), bal);
+            realVault.requestWithdraw(amount);
 
-        assertEq(withdrawShares, bal / 2);
-        assertEq(real.balanceOf(user.addr), bal / 2);
+            (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 1);
 
-        assertEq(real.balanceOf(address(realVault)), contractBal + (bal / 2));
-        realVault.requestWithdraw(bal / 2);
+            assertEq(withdrawShares, amount);
+            assertEq(real.balanceOf(userAddress), amount);
 
-        (withdrawRound, withdrawShares,) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 1);
+            assertEq(real.balanceOf(address(realVault)), contractBal + amount);
+            realVault.requestWithdraw(amount);
 
-        assertEq(withdrawShares, bal);
-        assertEq(withdrawingSharesInRound + bal, realVault.withdrawingSharesInRound());
+            (withdrawRound, withdrawShares,) = realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 1);
 
-        assertEq(real.balanceOf(user.addr), 0);
-        vm.stopPrank();
+            assertEq(withdrawShares, bal);
+            assertEq(withdrawingSharesInRound + bal, realVault.withdrawingSharesInRound());
+
+            assertEq(real.balanceOf(userAddress), 0);
+            vm.stopPrank();
+        }
     }
 
-    function test_requesMultiplytWithdrawsInDifferentRounds() public {
-        deal(user.addr, 10 ether);
-        vm.startPrank(user.addr);
+    function test_fuzzRequesMultiplytWithdrawsInDifferentRounds(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
 
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount * 2);
+            vm.startPrank(userAddress);
 
-        // roll epoch to next round
-        realVault.rollToNextRound();
-        uint256 bal = real.balanceOf(user.addr);
+            // Deposit in Round#0
+            realVault.deposit{value: amount * 2}();
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
-        uint256 contractBal = real.balanceOf(address(realVault));
-        uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
+            // roll epoch to next round
+            realVault.rollToNextRound();
+            uint256 bal = real.balanceOf(userAddress);
 
-        real.approve(address(realVault), bal);
-        realVault.requestWithdraw(bal / 2);
+            uint256 contractBal = real.balanceOf(address(realVault));
+            uint256 withdrawingSharesInRound = realVault.withdrawingSharesInRound();
 
-        (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) = realVault.userReceipts(user.addr);
-        assertEq(withdrawingSharesInRound + bal / 2, realVault.withdrawingSharesInRound());
+            real.approve(address(realVault), bal);
+            realVault.requestWithdraw(amount);
 
-        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
-        realVault.rollToNextRound();
+            (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) =
+                realVault.userReceipts(userAddress);
+            assertEq(withdrawingSharesInRound + amount, realVault.withdrawingSharesInRound());
 
-        assertEq(0, realVault.withdrawingSharesInRound());
+            vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+            realVault.rollToNextRound();
 
-        realVault.requestWithdraw(bal / 2);
-        uint256 withdrawAmount = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
+            assertEq(0, realVault.withdrawingSharesInRound());
 
-        (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 2);
+            realVault.requestWithdraw(amount);
+            uint256 withdrawAmount =
+                ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
 
-        assertEq(withdrawShares, bal / 2);
-        assertEq(withdrawableAmount, withdrawAmount);
+            (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 2);
 
-        assertEq(real.balanceOf(user.addr), 0);
-        assertEq(bal / 2, realVault.withdrawingSharesInRound());
+            assertEq(withdrawShares, amount);
+            assertEq(withdrawableAmount, withdrawAmount);
 
-        assertEq(real.balanceOf(address(realVault)), contractBal + (bal / 2));
-        vm.stopPrank();
+            assertEq(real.balanceOf(userAddress), 0);
+            assertEq(amount, realVault.withdrawingSharesInRound());
+
+            assertEq(real.balanceOf(address(realVault)), contractBal + amount);
+            vm.stopPrank();
+        }
     }
 
-    function test_cancelWithdraw() public {
-        deal(user.addr, 10 ether);
-        vm.startPrank(user.addr);
+    function test_fuzzCancelWithdraw(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
 
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount);
+            vm.startPrank(userAddress);
 
-        realVault.rollToNextRound();
-        uint256 bal = real.balanceOf(user.addr);
+            // Deposit in Round#0
+            realVault.deposit{value: amount}();
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
-        uint256 contractBal = real.balanceOf(address(realVault));
-        real.approve(address(realVault), bal);
+            realVault.rollToNextRound();
+            uint256 bal = real.balanceOf(userAddress);
 
-        realVault.requestWithdraw(bal);
-        (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(user.addr);
+            uint256 contractBal = real.balanceOf(address(realVault));
+            real.approve(address(realVault), bal);
 
-        assertEq(withdrawRound, 1);
-        assertEq(withdrawShares, bal);
+            realVault.requestWithdraw(bal);
+            (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(userAddress);
 
-        assertEq(contractBal + bal, real.balanceOf(address(realVault)));
-        assertEq(0, real.balanceOf(user.addr));
+            assertEq(withdrawRound, 1);
+            assertEq(withdrawShares, bal);
 
-        assertEq(bal, realVault.withdrawingSharesInRound());
-        realVault.cancelWithdraw(bal);
+            assertEq(contractBal + bal, real.balanceOf(address(realVault)));
+            assertEq(0, real.balanceOf(userAddress));
 
-        assertEq(0, realVault.withdrawingSharesInRound());
-        (withdrawRound, withdrawShares,) = realVault.userReceipts(user.addr);
+            assertEq(bal, realVault.withdrawingSharesInRound());
+            realVault.cancelWithdraw(bal);
 
-        assertEq(withdrawRound, 0);
-        assertEq(withdrawShares, 0);
+            assertEq(0, realVault.withdrawingSharesInRound());
+            (withdrawRound, withdrawShares,) = realVault.userReceipts(userAddress);
 
-        assertEq(contractBal, real.balanceOf(address(realVault)));
-        assertEq(bal, real.balanceOf(user.addr));
+            assertEq(withdrawRound, 0);
+            assertEq(withdrawShares, 0);
 
-        vm.stopPrank();
+            assertEq(contractBal, real.balanceOf(address(realVault)));
+            assertEq(bal, real.balanceOf(userAddress));
+
+            vm.stopPrank();
+        }
     }
 
-    function test_cancelPartOfRequestedWithdraw() public {
-        deal(user.addr, 10 ether);
-        vm.startPrank(user.addr);
+    function test_fuzzCancelPartOfRequestedWithdraw(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
 
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount * 2);
+            vm.startPrank(userAddress);
 
-        realVault.rollToNextRound();
-        uint256 bal = real.balanceOf(user.addr);
+            // Deposit in Round#0
+            realVault.deposit{value: amount * 2}();
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
-        uint256 contractBal = real.balanceOf(address(realVault));
-        real.approve(address(realVault), bal);
+            realVault.rollToNextRound();
+            uint256 bal = real.balanceOf(userAddress);
 
-        realVault.requestWithdraw(bal);
-        (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(user.addr);
+            uint256 contractBal = real.balanceOf(address(realVault));
+            real.approve(address(realVault), bal);
 
-        realVault.cancelWithdraw(bal / 2);
-        assertEq(bal / 2, realVault.withdrawingSharesInRound());
+            realVault.requestWithdraw(bal);
+            (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(userAddress);
 
-        (withdrawRound, withdrawShares,) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 1);
+            realVault.cancelWithdraw(amount);
+            assertEq(amount, realVault.withdrawingSharesInRound());
 
-        assertEq(withdrawShares, bal / 2);
-        assertEq(contractBal + bal / 2, real.balanceOf(address(realVault)));
+            (withdrawRound, withdrawShares,) = realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 1);
 
-        assertEq(bal / 2, real.balanceOf(user.addr));
-        vm.stopPrank();
+            assertEq(withdrawShares, amount);
+            assertEq(contractBal + amount, real.balanceOf(address(realVault)));
+
+            assertEq(amount, real.balanceOf(userAddress));
+            vm.stopPrank();
+        }
+    }
+
+    function test_fuzzInstantWithdrawEthInPastRound(address userAddress, uint256 amount) public {
+        amount = bound(amount, 0, type(uint160).max);
+
+        if (amount != 0 && userAddress != address(0)) {
+            deal(userAddress, amount);
+            vm.startPrank(userAddress);
+
+            // Deposit in Round#0
+            realVault.deposit{value: amount}();
+
+            vm.warp(epoch0 + realVault.rebaseTimeInterval());
+            realVault.rollToNextRound();
+
+            real.approve(address(realVault), amount);
+            realVault.requestWithdraw(amount);
+
+            (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) =
+                realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 1);
+
+            assertEq(withdrawShares, amount);
+            vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+
+            realVault.rollToNextRound();
+            (withdrawRound, withdrawShares,) = realVault.userReceipts(userAddress);
+
+            uint256 withdrawAmount =
+                ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
+            assertEq(realVault.withdrawableAmountInPast(), withdrawAmount);
+
+            realVault.instantWithdraw(amount, 0);
+            vm.stopPrank();
+
+            (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(userAddress);
+            assertEq(withdrawRound, 0);
+
+            assertEq(withdrawShares, 0);
+            assertEq(withdrawableAmount, 0);
+
+            assertEq(real.balanceOf(userAddress), 0 ether);
+            assertEq(address(assetsVault).balance, 0 ether);
+            assertEq(userAddress.balance, amount);
+        }
     }
 
     function test_round0InstantWithdraw() public {
@@ -322,90 +388,6 @@ contract VaultTest is Test {
         assertEq(real.balanceOf(user.addr), 0 ether);
         assertEq(address(assetsVault).balance, 0 ether);
         assertEq(user.addr.balance, 2 ether);
-    }
-
-    function test_InstantWithdraw() public {
-        deal(user.addr, 2 ether);
-        vm.startPrank(user.addr);
-
-        // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
-
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
-        realVault.rollToNextRound();
-
-        real.approve(address(realVault), 1 ether);
-        realVault.requestWithdraw(1 ether);
-
-        (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 1);
-
-        assertEq(withdrawShares, 1 ether);
-        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
-
-        realVault.rollToNextRound();
-        (withdrawRound, withdrawShares,) = realVault.userReceipts(user.addr);
-
-        uint256 withdrawAmount = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
-        assertEq(realVault.withdrawableAmountInPast(), withdrawAmount);
-
-        realVault.instantWithdraw(1 ether, 0);
-        vm.stopPrank();
-
-        (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, 0);
-
-        assertEq(withdrawShares, 0);
-        assertEq(withdrawableAmount, 0);
-
-        assertEq(real.balanceOf(user.addr), 0 ether);
-        assertEq(address(assetsVault).balance, 0 ether);
-        assertEq(user.addr.balance, 2 ether);
-    }
-
-    function test_InstantWithdraw0() public {
-        deal(user.addr, 2 ether);
-        vm.startPrank(user.addr);
-
-        // Deposit in Round#0
-        realVault.deposit{value: 2 ether}();
-        vm.warp(epoch0 + realVault.rebaseTimeInterval());
-
-        realVault.rollToNextRound();
-        real.approve(address(realVault), 1 ether);
-
-        realVault.requestWithdraw(1 ether);
-        (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) = realVault.userReceipts(user.addr);
-
-        assertEq(withdrawRound, 1);
-        assertEq(withdrawShares, 1 ether);
-
-        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
-        realVault.rollToNextRound();
-
-        uint256 withdrawAmount = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
-        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
-
-        realVault.rollToNextRound();
-        real.approve(address(realVault), 1 ether);
-
-        realVault.requestWithdraw(1 ether);
-        assertEq(realVault.withdrawableAmountInPast(), withdrawAmount);
-
-        realVault.instantWithdraw(1 ether, 0);
-        vm.stopPrank();
-
-        (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(user.addr);
-        assertEq(withdrawRound, realVault.latestRoundID());
-
-        assertEq(withdrawShares, 1 ether);
-        assertEq(withdrawableAmount, 0);
-
-        assertEq(realVault.withdrawableAmountInPast(), 0);
-        assertEq(real.balanceOf(user.addr), 0 ether);
-
-        assertEq(address(assetsVault).balance, 0 ether);
-        assertEq(user.addr.balance, 1 ether);
     }
 
     function test_rollToNextRound() public {
