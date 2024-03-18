@@ -232,8 +232,6 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    // TODO test failed scenarios
-
     function test_cancelWithdraw() public {
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
@@ -358,6 +356,51 @@ contract VaultTest is Test {
         assertEq(real.balanceOf(user.addr), 0 ether);
         assertEq(address(assetsVault).balance, 0 ether);
         assertEq(user.addr.balance, 2 ether);
+    }
+
+    function test_InstantWithdraw0() public {
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+
+        // Deposit in Round#0
+        realVault.deposit{value: 2 ether}();
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+
+        realVault.rollToNextRound();
+        real.approve(address(realVault), 1 ether);
+
+        realVault.requestWithdraw(1 ether);
+        (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) = realVault.userReceipts(user.addr);
+
+        assertEq(withdrawRound, 1);
+        assertEq(withdrawShares, 1 ether);
+
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        uint256 withdrawAmount = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+
+        realVault.rollToNextRound();
+        real.approve(address(realVault), 1 ether);
+
+        realVault.requestWithdraw(1 ether);
+        assertEq(realVault.withdrawableAmountInPast(), withdrawAmount);
+
+        realVault.instantWithdraw(1 ether, 0);
+        vm.stopPrank();
+
+        (withdrawRound, withdrawShares, withdrawableAmount) = realVault.userReceipts(user.addr);
+        assertEq(withdrawRound, realVault.latestRoundID());
+
+        assertEq(withdrawShares, 1 ether);
+        assertEq(withdrawableAmount, 0);
+
+        assertEq(realVault.withdrawableAmountInPast(), 0);
+        assertEq(real.balanceOf(user.addr), 0 ether);
+
+        assertEq(address(assetsVault).balance, 0 ether);
+        assertEq(user.addr.balance, 1 ether);
     }
 
     function test_rollToNextRound() public {
