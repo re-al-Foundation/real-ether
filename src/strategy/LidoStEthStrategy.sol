@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
 
+import {EnumerableSet} from "oz/utils/structs/EnumerableSet.sol";
 import {Strategy} from "./Strategy.sol";
+
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IWStETH} from "../interfaces/IWStETH.sol";
 import {ISwapManager} from "../interfaces/ISwapManager.sol";
@@ -17,6 +19,7 @@ error Strategy__ZeroPoolLiquidity();
 error Strategy__LidoSharesTransfer();
 error Strategy__LidoRequestWithdraw();
 error Strategy__InsufficientBalance();
+error Strategy__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 /**
  * @title LidoStEthStrategy
@@ -24,11 +27,23 @@ error Strategy__InsufficientBalance();
  * @dev A strategy contract for generating eth yield by managing Lido staked ETH (stETH)
  */
 contract LidoStEthStrategy is Strategy {
+    using EnumerableSet for EnumerableSet.UintSet;
+
+    /// @notice minimal amount of stETH that is possible to withdraw
+    uint256 public constant MIN_STETH_WITHDRAWAL_AMOUNT = 1_00;
+
+    /// @notice maximum amount of stETH that is possible to withdraw by a single request
+    /// Prevents accumulating too much funds per single request fulfillment in the future.
+    /// @dev To withdraw larger amounts, it's recommended to split it to several requests
+    uint256 public constant MAX_STETH_WITHDRAWAL_AMOUNT = 1_000 * 10 ** 18;
+
     address public swapManager;
     IStETH public STETH; //strategy token
     address public WETH9; //swap token for uniV3
     address public WSTETH; //swap token for uniV3
     IWithdrawalQueueERC721 public stETHWithdrawalQueue;
+
+    EnumerableSet.UintSet private withdrawQueue;
 
     /**
      * @param _stETHAdress The address of the stETH contract
@@ -50,7 +65,7 @@ contract LidoStEthStrategy is Strategy {
     ) Strategy(_manager, _name) {
         if (
             _stETHAdress == address(0) || _stETHWithdrawal == address(0) || _wstETHAdress == address(0)
-                || _weth9 == address(0) || _swapManager == address(0) || _manager == address(0)
+                || _weth9 == address(0) || _swapManager == address(0)
         ) revert Strategy__ZeroAddress();
 
         STETH = IStETH(_stETHAdress);
@@ -68,11 +83,6 @@ contract LidoStEthStrategy is Strategy {
     function _instantWithdraw(uint256 _amount) internal returns (uint256 actualAmount) {
         // swap stEth for eth
         actualAmount = _swapUsingFairQuote(_amount);
-        uint256 share = STETH.sharesOf(address(this));
-        if (share > 0) {
-            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
-            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
-        }
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
@@ -84,9 +94,12 @@ contract LidoStEthStrategy is Strategy {
     function _swapUsingFairQuote(uint256 _amountIn) internal returns (uint256 actualAmount) {
         uint256 amountInForV3 = IWStETH(WSTETH).getWstETHByStETH(_amountIn);
         uint256 v3Out = ISwapManager(swapManager).estimateV3AmountOut(uint128(amountInForV3), WSTETH, WETH9);
-        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH), WETH9);
+        uint256 curveOut = ISwapManager(swapManager).estimateCurveAmountOut(_amountIn, address(STETH));
 
         if (v3Out == 0 && curveOut == 0) revert Strategy__ZeroPoolLiquidity();
+
+        uint256 quoteAmount = v3Out > curveOut ? v3Out : curveOut;
+        uint256 quoteAmountMin = ISwapManager(swapManager).getMinimumAmount(WETH9, quoteAmount);
         address tokenIn;
 
         if (v3Out > curveOut) {
@@ -104,147 +117,19 @@ contract LidoStEthStrategy is Strategy {
             TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
             actualAmount = ISwapManager(swapManager).swapCurve(tokenIn, _amountIn);
         }
+
+        // check recieved amount out using fairQuoteMin
+        if (actualAmount < quoteAmountMin) revert Strategy__TooLittleRecieved(actualAmount, quoteAmountMin);
     }
 
-    /**
-     * @notice Deposit ETH into the Lido stETH contract.
-     * @dev Only the strategy manager can call this function.
-     */
-    function deposit() external payable override onlyManager {
-        if (msg.value == 0) revert Strategy__ZeroAmount();
-        uint256 shares = STETH.submit{value: msg.value}(address(0));
-        if (shares == 0) revert Strategy__LidoDeposit();
-    }
-
-    /**
-     * @notice Initiate a withdrawal of a specific amount of stETH.
-     * @dev Only the strategy manager can call this function.
-     * @param _ethAmount The amount of stETH to withdraw.
-     * @return actualAmount The actual amount of stETH withdrawn.
-     */
-    function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
-        if (_ethAmount == 0) revert Strategy__ZeroAmount();
-        if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
-
-        //approve steth for WithdrawalQueueERC721
-        TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
-
-        uint256[] memory requestedAmounts = new uint256[](1);
-        requestedAmounts[0] = _ethAmount;
-
-        //raise a withdraw request to WithdrawalQueueERC721
-        uint256[] memory ids = stETHWithdrawalQueue.requestWithdrawals(requestedAmounts, address(this));
-        if (ids.length == 0) revert Strategy__LidoRequestWithdraw();
-
-        actualAmount = _ethAmount;
-        if (address(this).balance > 0) {
-            TransferHelper.safeTransferETH(manager, address(this).balance);
-        }
-    }
-
-    /**
-     * @notice Claim all pending withdrawal assets from the stETH withdrawal queue.
-     * @dev This function claims all pending withdrawal assets and transfers them to the assets vault.
-     */
-    function claimAllPendingAssets() external {
-        (uint256[] memory ids,,) = checkPendingAssets();
-
-        uint256 len = ids.length;
-
-        for (uint256 i = 0; i < len;) {
-            stETHWithdrawalQueue.claimWithdrawal(ids[i]);
-            unchecked {
-                i++;
-            }
-        }
-
-        TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
-    }
-
-    /**
-     * @notice Redeems eth amount and deposit redeemed amount in the bridge
-     * NB! Array of request ids should be sorted
-     * @param requestIds An array of withdrawal request ids
-     * @return claimableRequestIds An array of withdrawal request IDs that are claimable
-     */
-    function claimAllPendingAssetsByIds(uint256[] memory requestIds) external returns (uint256[] memory) {
-        // Array of request ids must be sorted
-        IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses = getStETHWithdrawalStatusForIds(requestIds);
-        uint256[] memory claimableRequestIds = new uint256[](requestIds.length);
-
-        uint256 index = 0;
-        bool isFinalised;
-        uint256 statusLen = statuses.length;
-        for (uint256 i = 0; i < statusLen;) {
-            IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
-            if (status.isFinalized && !status.isClaimed) {
-                //accumulate the claimable request id
-                claimableRequestIds[index++] = requestIds[i];
-                isFinalised = true;
-            }
-            unchecked {
-                i++;
-            }
-        }
-
-        // remove the empty zeros
-        assembly {
-            mstore(claimableRequestIds, index)
-        }
-
-        if (isFinalised) {
-            uint256[] memory hints = stETHWithdrawalQueue.findCheckpointHints(
-                claimableRequestIds, 1, stETHWithdrawalQueue.getLastCheckpointIndex()
-            );
-
-            //calim withdrawal amount
-            stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
-
-            // Transfer the claimed asset to the assets vault
-            TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
-        }
-
-        return claimableRequestIds;
-    }
-
-    /**
-     * @notice Initiate an instant withdrawal of stETH using swap pools
-     * @dev Only the strategy manager can call this function.
-     * @param _amount The amount of stETH to withdraw.
-     * @return actualAmount The actual amount of stETH withdrawn.
-     */
-    function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
-        if (_amount == 0) return 0;
-        actualAmount = _instantWithdraw(_amount);
-    }
-
-    /**
-     * @notice Clear the strategy by withdrawing all stETH to the assets vault
-     * @dev This function withdraws all stETH from the strategy and transfers them to the strategy manager's assets vault.
-     * @return amount The amount of stETH withdrawn.
-     */
-    function clear() external override onlyManager returns (uint256 amount) {
-        uint256 balance = STETH.balanceOf(address(this));
-        // if stEth shares is zero return actualAmount = 0
-        if (balance == 0) return 0;
-        amount = _instantWithdraw(balance);
-    }
-
-    /**
-     * @notice Check the pending withdrawal assets from the stETH withdrawal queue.
-     * @dev This function retrieves the pending withdrawal assets and returns their IDs, total claimable amount, and total pending amount.
-     * @return ids An array of withdrawal request IDs.
-     * @return totalClaimable The total amount of claimable stETH.
-     * @return totalPending The total amount of pending stETH.
-     */
-    function checkPendingAssets()
-        public
+    function _checkPendingAssets(uint256[] memory requestIds)
+        internal
         view
         returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
     {
-        uint256[] memory requestIds = stETHWithdrawalQueue.getWithdrawalRequests(address(this));
-        if (requestIds.length == 0) return (new uint256[](0), 0, 0);
-        ids = new uint256[](requestIds.length);
+        uint256 requestLen = requestIds.length;
+        if (requestLen == 0) return (new uint256[](0), 0, 0);
+        ids = new uint256[](requestLen);
 
         IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses =
             stETHWithdrawalQueue.getWithdrawalStatus(requestIds);
@@ -273,6 +158,188 @@ contract LidoStEthStrategy is Strategy {
     }
 
     /**
+     * @notice Deposit ETH into the Lido stETH contract.
+     * @dev Only the strategy manager can call this function.
+     */
+    function deposit() external payable override onlyManager {
+        if (msg.value == 0) revert Strategy__ZeroAmount();
+        uint256 shares = STETH.submit{value: msg.value}(address(0));
+        if (shares == 0) revert Strategy__LidoDeposit();
+    }
+
+    /**
+     * @notice Initiate a withdrawal of a specific amount of stETH.
+     * @dev Only the strategy manager can call this function.
+     * @param _ethAmount The amount of stETH to withdraw.
+     * @return actualAmount The actual amount of stETH withdrawn.
+     */
+    function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
+        if (_ethAmount == 0) revert Strategy__ZeroAmount();
+        // default to the MIN_STETH_WITHDRAWAL_AMOUNT if the requested withdrawal amount is less than the minimum.
+        if (_ethAmount < MIN_STETH_WITHDRAWAL_AMOUNT) _ethAmount = MIN_STETH_WITHDRAWAL_AMOUNT;
+
+        if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
+
+        //approve steth for WithdrawalQueueERC721
+        TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
+
+        uint256 remainingBalance = _ethAmount;
+        uint256 batchLen = (_ethAmount / MAX_STETH_WITHDRAWAL_AMOUNT) + 1;
+        uint256[] memory requestedAmounts = new uint256[](batchLen);
+        uint256 index;
+
+        while (remainingBalance != 0) {
+            if (remainingBalance > MAX_STETH_WITHDRAWAL_AMOUNT) {
+                requestedAmounts[index] = MAX_STETH_WITHDRAWAL_AMOUNT;
+            } else {
+                requestedAmounts[index] = remainingBalance;
+            }
+            unchecked {
+                remainingBalance -= requestedAmounts[index];
+                index++;
+            }
+        }
+
+        // reset the array length to remove empty values
+        assembly {
+            mstore(requestedAmounts, index)
+        }
+
+        //raise a withdraw request to WithdrawalQueueERC721
+        uint256[] memory ids = stETHWithdrawalQueue.requestWithdrawals(requestedAmounts, address(this));
+
+        uint256 idsLen = ids.length;
+        if (idsLen == 0) revert Strategy__LidoRequestWithdraw();
+
+        // push the withdraw request id
+        for (uint256 i = 0; i < idsLen;) {
+            withdrawQueue.add(ids[i]);
+            unchecked {
+                i++;
+            }
+        }
+
+        actualAmount = _ethAmount;
+        if (address(this).balance > 0) {
+            TransferHelper.safeTransferETH(manager, address(this).balance);
+        }
+    }
+
+    /**
+     * @notice Claim all pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function claims all pending withdrawal assets and transfers them to the assets vault.
+     * The queue will always stay within bounds since withdrawal is requested once per rebase cycle,
+     * which is 365 requests in a year for a 1-day epoch cycle or 52 requests in a year for a 7-day epoch cycle
+     * If the queue expands to a level where withdrawQueue consumes excessive gas, use claimAllPendingAssetsByIds instead.
+     */
+    function claimAllPendingAssets() external override {
+        uint256[] memory withdrawIds = withdrawQueue.values();
+        (uint256[] memory ids,,) = checkPendingAssets(withdrawIds);
+
+        uint256 len = ids.length;
+        for (uint256 i = 0; i < len;) {
+            stETHWithdrawalQueue.claimWithdrawal(ids[i]);
+            // remove claimed request Ids
+            withdrawQueue.remove(ids[i]);
+            unchecked {
+                i++;
+            }
+        }
+
+        TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
+    }
+
+    /**
+     * @notice Redeems eth amount and deposit redeemed amount in the bridge
+     * NB! Array of request ids should be sorted
+     * @param claimableRequestIds An array of withdrawal request IDs that are claimable
+     * @param hints Array of hints used to find required checkpoint for the request
+     *  Reverts if requestIds and hints arrays length differs
+     *  Reverts if any requestId or hint in arguments are not valid
+     *  Reverts if any request is not finalized or already claimed
+     */
+    function claimAllPendingAssetsByIds(uint256[] memory claimableRequestIds, uint256[] memory hints) external {
+        //calim withdrawal amount
+        stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
+
+        // remove claimed request Ids
+        uint256 requestsLen = claimableRequestIds.length;
+        for (uint256 i = 0; i < requestsLen;) {
+            withdrawQueue.remove(claimableRequestIds[i]);
+            unchecked {
+                i++;
+            }
+        }
+
+        // Transfer the claimed asset to the assets vault
+        if (address(this).balance > 0) {
+            TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
+        }
+    }
+
+    /**
+     * @notice Initiate an instant withdrawal of stETH using swap pools
+     * @dev Only the strategy manager can call this function.
+     * @param _amount The amount of stETH to withdraw.
+     * @return actualAmount The actual amount of stETH withdrawn.
+     */
+    function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
+        if (_amount == 0) return 0;
+        actualAmount = _instantWithdraw(_amount);
+    }
+
+    /**
+     * @notice Clear the strategy by withdrawing all stETH to the assets vault
+     * @dev This function withdraws all stETH from the strategy and transfers them to the strategy manager's assets vault.
+     * @return amount The amount of stETH withdrawn.
+     */
+    function clear() external override onlyManager returns (uint256 amount) {
+        uint256 balance = STETH.balanceOf(address(this));
+        // if stEth shares is zero return actualAmount = 0
+        if (balance == 0) return 0;
+        amount = _instantWithdraw(balance);
+
+        // Transfer left over dust shares to the asset vault
+        uint256 share = STETH.sharesOf(address(this));
+        if (share > 0) {
+            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
+            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
+        }
+    }
+
+    /**
+     * @notice Check the pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function retrieves the pending withdrawal assets and returns their IDs, total claimable amount, and total pending amount.
+     * @return ids An array of withdrawal request IDs.
+     * @return totalClaimable The total amount of claimable stETH.
+     * @return totalPending The total amount of pending stETH.
+     */
+    function checkPendingAssets()
+        public
+        view
+        returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
+    {
+        uint256[] memory requestIds = withdrawQueue.values();
+        (ids, totalClaimable, totalPending) = _checkPendingAssets(requestIds);
+    }
+
+    /**
+     * @notice Check the pending withdrawal assets from the stETH withdrawal queue.
+     * @dev This function retrieves the pending withdrawal assets and returns their IDs, total claimable amount, and total pending amount.
+     * @param requestIds An array of withdrawal request IDs
+     * @return ids An array of withdrawal request IDs.
+     * @return totalClaimable The total amount of claimable stETH.
+     * @return totalPending The total amount of pending stETH.
+     */
+    function checkPendingAssets(uint256[] memory requestIds)
+        public
+        view
+        returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
+    {
+        (ids, totalClaimable, totalPending) = _checkPendingAssets(requestIds);
+    }
+
+    /**
      * @notice Get the pending and executable assets amount
      * @dev This function retrieves the pending and executable assets from the stETH withdrawal queue.
      * @return pending The total amount of pending stETH.
@@ -280,6 +347,22 @@ contract LidoStEthStrategy is Strategy {
      */
     function checkPendingStatus() external view override returns (uint256 pending, uint256 executable) {
         (, executable, pending) = checkPendingAssets();
+    }
+
+    /**
+     * @notice Retrieves the withdrawal request ids
+     * @return requestIds An array of withdrawal request IDs
+     */
+    function getRequestIds() public view returns (uint256[] memory requestIds) {
+        return withdrawQueue.values();
+    }
+
+    /**
+     * @notice Retrieves the withdrawal request ids
+     * @return requestIdsLength An array size of withdrawal request IDs
+     */
+    function getRequestIdsLen() public view returns (uint256 requestIdsLength) {
+        return withdrawQueue.length();
     }
 
     /**
@@ -315,7 +398,7 @@ contract LidoStEthStrategy is Strategy {
      * @dev This function retrieves the total value of assets managed by the strategy, including invested, claimable, and pending values.
      * @return value The total value of assets managed by the strategy.
      */
-    function getAllValue() public view override returns (uint256 value) {
+    function getTotalValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 

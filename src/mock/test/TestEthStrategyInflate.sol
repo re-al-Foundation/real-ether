@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
 
-import {Strategy} from "../strategy/Strategy.sol";
+import {Strategy} from "src/strategy/Strategy.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-import {IStrategyManager} from "../interfaces/IStrategyManager.sol";
+import {IStrategyManager} from "src/interfaces/IStrategyManager.sol";
 
 error Strategy__ZeroAmount();
 error Strategy__InsufficientBalance();
 
-contract TestEthStrategy is Strategy {
+interface IUnderLying {
+    function withdraw(uint256 ethAmount) external returns (uint256 actualAmount);
+}
+
+contract TestEthStrategyInflate is Strategy {
     address public swapManager;
+    address public underlying;
     uint256 pendingReserve;
 
-    constructor(address payable _manager, string memory _name) Strategy(_manager, _name) {}
+    constructor(address payable _manager, string memory _name, address _underlying) Strategy(_manager, _name) {
+        underlying = _underlying;
+    }
 
     function deposit() external payable override onlyManager {
         if (msg.value == 0) revert Strategy__ZeroAmount();
@@ -21,7 +28,8 @@ contract TestEthStrategy is Strategy {
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
         if (_ethAmount > getTotalValue()) revert Strategy__InsufficientBalance();
-        actualAmount = _ethAmount;
+
+        actualAmount = IUnderLying(underlying).withdraw(_ethAmount);
         TransferHelper.safeTransferETH(manager, _ethAmount);
     }
 
@@ -54,11 +62,9 @@ contract TestEthStrategy is Strategy {
         value = 0;
     }
 
-    // function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
+    function claimAllPendingAssets() external virtual override {}
 
     function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
-
-    function claimAllPendingAssets() external virtual override {}
 
     receive() external payable {}
 }

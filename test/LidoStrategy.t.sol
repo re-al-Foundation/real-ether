@@ -86,6 +86,8 @@ contract LidoStrategyTest is Test {
         strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 5);
         swapManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 6);
 
+        deal(realVaultAddress, 0.001 ether);
+
         real = new Real(minterAddress);
         minter = new Minter(address(real), payable(realVaultAddress));
         realVault = new RealVault(
@@ -116,10 +118,10 @@ contract LidoStrategyTest is Test {
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
 
         swapManager = new SwapManager(address(this), WETH9, NULL, 0xE592427A0AEce92De3Edee1F18E0157C05861564);
-        swapManager.setWhitelistV3Pool(wstETHAdress, wstETH_ETH, 1000_000);
-        swapManager.setWhitelistCurvePool(stETHAdress, stETH_ETH, 1000_000);
-        swapManager.setTokenSlippage(WETH9, 995_000);
-        swapManager.setTokenSlippage(NULL, 995_000);
+        swapManager.setWhitelistV3Pool(wstETHAdress, wstETH_ETH, 0);
+        swapManager.setWhitelistCurvePool(stETHAdress, stETH_ETH, 0);
+        swapManager.setTokenSlippage(WETH9, 5_00_00); // 5%
+        swapManager.setTokenSlippage(NULL, 5_00_00); // 5%
 
         testEthStrategy = new TestEthStrategy(payable(strategyManagerAddress), "Mock Eth Investment");
 
@@ -130,6 +132,82 @@ contract LidoStrategyTest is Test {
 
         realVault.deposit{value: 1 ether}();
         vm.stopPrank();
+
+        vm.startPrank(address(0xdead));
+        realVault.instantWithdraw(0, 0.001 ether);
+        vm.stopPrank();
+    }
+
+    function test_instantWithdrawForDifferentUsers() public {
+        LidoStEthStrategy[3] memory lido;
+
+        for (uint256 i = 0; i < 3; i++) {
+            lido[i] = new LidoStEthStrategy(
+                stETHAdress,
+                stETHWithdrawal,
+                wstETHAdress,
+                WETH9,
+                swapManagerAddress,
+                payable(strategyManagerAddress),
+                "Lido StEth Strategy Investment"
+            );
+        }
+
+        address[] memory strategies = new address[](4);
+        uint256[] memory ratios = new uint256[](4);
+
+        strategies[0] = address(lidoStEthStrategy);
+        ratios[0] = 20_00_00; //20%
+        strategies[1] = address(lido[0]);
+        ratios[1] = 30_00_00; //30%
+        strategies[2] = address(lido[1]);
+        ratios[2] = 25_00_00; //25%
+        strategies[3] = address(lido[2]);
+        ratios[3] = 10_00_00; //10%
+
+        vm.startPrank(proposal.addr);
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+        realVault.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        deal(deployer.addr, 10 ether);
+        vm.startPrank(deployer.addr);
+        realVault.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        deal(user2.addr, 10 ether);
+        vm.startPrank(user2.addr);
+        realVault.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+
+        uint256 totalBal = address(assetsVault).balance;
+
+        // roll epoch to next round
+        realVault.rollToNextRound();
+
+        address[3] memory users = [user.addr, deployer.addr, user2.addr];
+
+        for (uint256 i = 0; i < users.length; i++) {
+            vm.startPrank(users[i]);
+            realVault.instantWithdraw(0, real.balanceOf(users[i]));
+            vm.stopPrank();
+
+            assertApproxEqAbs(users[i].balance, 10 ether, 0.5 ether);
+        }
+
+        uint256 balLeftInPool = IStETH(stETHAdress).sharesOf(address(lidoStEthStrategy))
+            + IStETH(stETHAdress).sharesOf(address(lido[0])) + IStETH(stETHAdress).sharesOf(address(lido[1]))
+            + IStETH(stETHAdress).sharesOf(address(lido[2]));
+
+        uint256 balLeftInPoolInETH = IStETH(stETHAdress).getPooledEthByShares(balLeftInPool);
+        assertApproxEqAbs(balLeftInPoolInETH, real.balanceOf(deadShares.addr), 20);
     }
 
     function test_deposit() external {
@@ -473,5 +551,124 @@ contract LidoStrategyTest is Test {
 
         // 0.001259297158 deducted as swap fees
         assertApproxEqAbs(address(assetsVault).balance, 2 ether, 0.0015 ether);
+    }
+
+    function test_WithdrawalQueue() external {
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+
+        uint256 shares = realVault.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        realVault.rollToNextRound();
+
+        vm.startPrank(proposal.addr);
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+        //test eth strategy
+        strategies[0] = address(lidoStEthStrategy);
+        ratios[0] = 60_00_00; //60%
+        // update strategy
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        realVault.rollToNextRound();
+
+        assertEq(lidoStEthStrategy.getRequestIds()[0], 28235);
+
+        address finalizer = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84; //stETH token
+        uint256 lastRequestId = IWithdrawalQueueERC721(stETHWithdrawal).getLastRequestId();
+
+        uint256[] memory batches = new uint256[](1);
+        batches[0] = lastRequestId;
+
+        (uint256 ethToLock, uint256 sharesToBurn) = IWithdrawalQueueERC721(stETHWithdrawal).prefinalize(batches, 1e27);
+
+        // update the eth balance in stETH
+        deal(finalizer, 95_00 ether);
+
+        vm.startPrank(finalizer);
+        uint256 sharesToBurnWithPrecision = sharesToBurn * 1e27;
+        IWithdrawalQueueERC721(stETHWithdrawal).finalize{value: ethToLock}(lastRequestId, sharesToBurnWithPrecision);
+        vm.stopPrank();
+
+        (, uint256 totalClaimableAfterTx0,) = lidoStEthStrategy.checkPendingAssets();
+        assertEq(totalClaimableAfterTx0, 4.4 ether);
+
+        lidoStEthStrategy.claimAllPendingAssets();
+
+        assertEq(lidoStEthStrategy.getRequestIds().length, 0);
+    }
+
+    function test_WithdrawalQueueMax() external {
+        deal(user.addr, 1_000_000 ether);
+        vm.startPrank(user.addr);
+
+        uint256 shares = realVault.deposit{value: 1_00_00 ether}();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        realVault.rollToNextRound();
+
+        vm.startPrank(proposal.addr);
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+        //test eth strategy
+        strategies[0] = address(lidoStEthStrategy);
+        ratios[0] = 20_00_00; //20%
+        // update strategy
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        realVault.rollToNextRound();
+
+        assertEq(lidoStEthStrategy.getRequestIds().length, 9);
+
+        address finalizer = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84; //stETH token
+        uint256 lastRequestId = IWithdrawalQueueERC721(stETHWithdrawal).getLastRequestId();
+
+        uint256[] memory batches = new uint256[](1);
+        batches[0] = lastRequestId;
+
+        (uint256 ethToLock, uint256 sharesToBurn) = IWithdrawalQueueERC721(stETHWithdrawal).prefinalize(batches, 1e27);
+
+        // update the eth balance in stETH
+        deal(finalizer, 250_00 ether);
+
+        vm.startPrank(finalizer);
+        uint256 sharesToBurnWithPrecision = sharesToBurn * 1e27;
+        IWithdrawalQueueERC721(stETHWithdrawal).finalize{value: ethToLock}(lastRequestId, sharesToBurnWithPrecision);
+        vm.stopPrank();
+
+        (, uint256 totalClaimableAfterTx0,) = lidoStEthStrategy.checkPendingAssets();
+        assertEq(totalClaimableAfterTx0, 8000.8 ether); //80% of 10,000 ETH as claimable
+
+        lidoStEthStrategy.claimAllPendingAssets();
+        assertEq(lidoStEthStrategy.getRequestIds().length, 0);
+
+        (, uint256 totalClaimable,) = lidoStEthStrategy.checkPendingAssets();
+        assertEq(totalClaimable, 0);
+    }
+
+    function test_WithdrawalQueueMin() external {
+        deal(user.addr, 1_000_000 ether);
+        vm.startPrank(user.addr);
+
+        uint256 shares = realVault.deposit{value: 1_00_00 ether}();
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        realVault.rollToNextRound();
+
+        vm.startPrank(address(strategyManager));
+        lidoStEthStrategy.withdraw(10); //10wei
+
+        (,, uint256 totalPending) = lidoStEthStrategy.checkPendingAssets();
+        assertEq(totalPending, 1_00); // MIN_STETH_WITHDRAWAL_AMOUNT
+
+        vm.stopPrank();
     }
 }

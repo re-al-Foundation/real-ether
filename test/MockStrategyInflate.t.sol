@@ -7,7 +7,8 @@ import {Minter} from "src/token/Minter.sol";
 import {RealVault} from "src/RealVault.sol";
 import {StrategyManager} from "src/StrategyManager.sol";
 import {AssetsVault} from "src/AssetsVault.sol";
-import {TestEthStrategy} from "src/mock/TestEthStrategy.sol";
+import {TestEthStrategyInflate} from "src/mock/test/TestEthStrategyInflate.sol";
+import {UnderlyingYieldGenerator} from "src/mock/test/UnderlyingYieldGenerator.sol";
 
 contract TestEthStrategyTest is Test {
     uint256 PRECISION = 10 ** 18;
@@ -17,7 +18,8 @@ contract TestEthStrategyTest is Test {
     RealVault public realVault;
     StrategyManager public strategyManager;
     AssetsVault public assetsVault;
-    TestEthStrategy public s1;
+    TestEthStrategyInflate public s1;
+    UnderlyingYieldGenerator public underlying;
 
     address minterAddress;
     address realVaultAddress;
@@ -42,7 +44,7 @@ contract TestEthStrategyTest is Test {
         minterAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         realVaultAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         assetVaultAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 3);
-        strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 5);
+        strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 6);
 
         deal(realVaultAddress, 0.001 ether);
 
@@ -57,10 +59,12 @@ contract TestEthStrategyTest is Test {
         );
         assetsVault = new AssetsVault(address(realVault), strategyManagerAddress);
 
+        underlying = new UnderlyingYieldGenerator(address(assetsVault));
+
         address[] memory strategies = new address[](1);
         uint256[] memory ratios = new uint256[](1);
 
-        s1 = new TestEthStrategy(payable(strategyManagerAddress), "Mock Eth Investment");
+        s1 = new TestEthStrategyInflate(payable(strategyManagerAddress), "Mock Eth Investment", address(underlying));
         strategies[0] = address(s1);
         ratios[0] = 1000_000; // 1e6
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
@@ -72,39 +76,33 @@ contract TestEthStrategyTest is Test {
         vm.stopPrank();
     }
 
-    function test_deposit() external {
-        vm.deal(address(strategyManager), 1 ether);
-        vm.startPrank(address(strategyManager));
+    function test_InflatePPS() external {
+        deal(address(underlying), 20 ether);
+        deal(user.addr, 50 ether);
+        deal(user2.addr, 50 ether);
 
-        s1.deposit{value: 1 ether}();
+        vm.startPrank(address(user.addr));
+        realVault.deposit{value: 50 ether}();
         vm.stopPrank();
-    }
 
-    function test_withdraw() external {
-        deal(address(s1), 1 ether);
-        vm.deal(address(strategyManager), 1 ether);
-
-        vm.startPrank(address(strategyManager));
-        s1.deposit{value: 1 ether}();
-
-        assertEq(address(strategyManager).balance, 0);
-        s1.withdraw(2 ether);
-
+        vm.startPrank(address(user2.addr));
+        realVault.deposit{value: 30 ether}();
         vm.stopPrank();
-        assertEq(address(strategyManager).balance, 2 ether);
-    }
 
-    function test_clear() external {
-        deal(address(s1), 1 ether);
-        deal(address(strategyManager), 1 ether);
-        vm.startPrank(address(strategyManager));
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
 
-        s1.deposit{value: 1 ether}();
-
-        assertEq(address(strategyManager).balance, 0);
-        s1.clear();
-
+        vm.startPrank(address(user.addr));
+        real.approve(address(realVault), 10 ether);
+        realVault.requestWithdraw(10 ether);
         vm.stopPrank();
-        assertEq(address(strategyManager).balance, 2 ether);
+
+        // increment the time to the next round
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+        assertEq(realVault.currentSharePrice(), 1.125 ether);
     }
 }

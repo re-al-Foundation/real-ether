@@ -22,7 +22,7 @@ contract TestEthClaimableStrategy is Strategy {
 
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert TestEthClaimableStrategy__ZeroAmount();
-        if (_ethAmount > getAllValue()) revert TestEthClaimableStrategy__InsufficientBalance();
+        if (_ethAmount > getTotalValue()) revert TestEthClaimableStrategy__InsufficientBalance();
         // Mock: On withdraw request will be raised to initiate withdraw from the strategy protocol
         // amount can be claimed after approval by the strategy protocol
         pendingReserve += _ethAmount;
@@ -30,7 +30,7 @@ contract TestEthClaimableStrategy is Strategy {
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
-    function claimAllPendingAssets() external {
+    function claimAllPendingAssets() external override {
         uint256 _amount = pendingReserve;
         pendingReserve = 0;
         TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), _amount);
@@ -49,7 +49,7 @@ contract TestEthClaimableStrategy is Strategy {
         amount = address(this).balance - getPendingValue();
     }
 
-    function getAllValue() public view override returns (uint256 value) {
+    function getTotalValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 
@@ -68,4 +68,8 @@ contract TestEthClaimableStrategy is Strategy {
     function getClaimableAndPendingValue() public pure returns (uint256 value) {
         value = 0;
     }
+
+    // function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
+
+    function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
 }

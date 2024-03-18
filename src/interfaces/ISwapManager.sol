@@ -48,17 +48,15 @@ interface ISwapManager {
 
     function swapCurve(address tokenIn, uint256 amountIn) external returns (uint256 amountOut);
 
+    function getMinimumAmount(address token, uint256 amount) external view returns (uint256);
+
     /**
      * @dev Estimates the output amount of a token swap in a Curve pool.
      * @param amountIn The amount of input tokens.
      * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
      * @return amountOut The estimated amount of output tokens.
      */
-    function estimateCurveAmountOut(uint256 amountIn, address tokenIn, address tokenOut)
-        external
-        view
-        returns (uint256 amountOut);
+    function estimateCurveAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256 amountOut);
 
     /**
      * @dev Estimates the output amount of a token swap in a V3 pool.

@@ -8,7 +8,7 @@ error Real__ZeroAddress();
 error Real__NotMinter();
 
 contract Real is ERC20 {
-    address public minter;
+    address public immutable minter;
 
     constructor(address _minter) ERC20("Real Ether", "reETH") {
         if (_minter == address(0)) revert Real__ZeroAddress();

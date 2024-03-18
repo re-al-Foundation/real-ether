@@ -59,11 +59,11 @@ contract SwapManagerTest is Test {
         ratios[0] = 1000_000; // 1e6
         strategies[0] = address(lidoStEthStrategy);
 
-        swapManager.setTokenSlippage(NULL, 995_000);
-        swapManager.setTokenSlippage(WETH9, 995_000);
+        swapManager.setTokenSlippage(NULL, 5_00_00); //5%
+        swapManager.setTokenSlippage(WETH9, 5_00_00); //5%
 
-        swapManager.setWhitelistV3Pool(wstETH, wstETH_ETH, 1000_000);
-        swapManager.setWhitelistCurvePool(stETH, stETH_ETH, 1000_000);
+        swapManager.setWhitelistV3Pool(wstETH, wstETH_ETH, 0);
+        swapManager.setWhitelistCurvePool(stETH, stETH_ETH, 0);
 
         strategyManager = new StrategyManager(address(1), payable(address(1)), strategies, ratios);
     }

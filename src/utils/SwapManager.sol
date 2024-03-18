@@ -3,6 +3,10 @@ pragma solidity =0.8.21;
 
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {IERC20} from "oz/token/ERC20/IERC20.sol";
+import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "oz/utils/math/SafeCast.sol";
+
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {ICurvePool} from "../interfaces/ICurvePool.sol";
@@ -15,13 +19,16 @@ error SwapManager__SlippageNotSet();
 error SwapManager__ZeroAddress();
 error SwapManager__NoLiquidity();
 error SwapManager__InvalidPoolToken();
-error SwapManager__NotLidoStEthStrategy();
 error SwapManager__NoPool(address tokenIn);
 error SwapManager__MIN_TWAP_DURATION(uint32 duration);
 error SwapManager__ExceedPercentage(uint256 given, uint256 max);
 error SwapManager__SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
+error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 contract SwapManager is Ownable {
+    using SafeERC20 for IERC20;
+    using SafeCast for uint256;
+
     enum DEX {
         Uniswap,
         Curve
@@ -30,15 +37,16 @@ contract SwapManager is Ownable {
     uint256 internal constant ZERO = 0;
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
-    uint32 public constant MIN_TWAP_DURATION = 36_00;
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000;
+    uint32 public constant MIN_TWAP_DURATION = 3_600;
+    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
+    uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
+
     uint32 public twapDuration;
 
-    address NULL;
-    address WETH9;
-    address v3SwapRouter;
-    address lidoStEthStrategy;
+    address public immutable NULL;
+    address public immutable WETH9;
+    address public immutable v3SwapRouter;
 
     // token => pool
     mapping(address => address) public v3Pools;
@@ -68,24 +76,31 @@ contract SwapManager is Ownable {
      */
     function swap(address tokenIn, uint256 amountIn) external returns (uint256 amountOut) {
         DEX dexType;
-        (dexType,) = getFairQuote(amountIn, tokenIn);
+        uint256 quoteAmount;
+        (dexType, quoteAmount) = getFairQuote(amountIn, tokenIn);
 
         if (dexType == DEX.Uniswap) {
             amountOut = swapUinv3(tokenIn, amountIn);
-        }
-
-        if (dexType == DEX.Curve) {
+        } else {
             amountOut = swapCurve(tokenIn, amountIn);
         }
+
+        // check recieved amount out using fairQuoteMin
+        uint256 quoteAmountMin = getMinimumAmount(WETH9, quoteAmount);
+        if (amountOut < quoteAmountMin) revert SwapManager__TooLittleRecieved(amountOut, quoteAmountMin);
     }
 
     /**
-     * @notice swap tokens from the uniswap v3 pools
+     * @notice Swap tokens from the uniswap v3 pools.
+     * @param tokenIn The input token address.
+     * @param amountIn The amount of input tokens.
+     * @return amountOut The amount of output tokens.
      */
     function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         // estimate price using the twap
-        uint256 quoteOut = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
-        uint256 amountOutMinimum = _getMinimumAmount(WETH9, quoteOut);
+        uint128 amountInUint128 = amountIn.toUint128();
+        uint256 quoteOut = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
+        uint256 amountOutMinimum = getMinimumAmount(WETH9, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         address pool = _getV3Pool(tokenIn);
@@ -93,37 +108,51 @@ contract SwapManager is Ownable {
         uint24 poolFee = IUniswapV3Pool(pool).fee();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        TransferHelper.safeApprove(tokenIn, v3SwapRouter, amountIn);
+        IERC20(tokenIn).forceApprove(v3SwapRouter, amountIn);
         amountOut = ISwapRouter(v3SwapRouter).exactInputSingle(
-            ISwapRouter.ExactInputSingleParams(
-                tokenIn, WETH9, poolFee, address(this), deadline, amountIn, amountOutMinimum, 0
-            )
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: WETH9,
+                fee: poolFee,
+                recipient: address(this),
+                deadline: deadline,
+                amountIn: amountIn,
+                amountOutMinimum: amountOutMinimum,
+                sqrtPriceLimitX96: 0
+            })
         );
 
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
         uint256 weth9Balance = IWETH9(WETH9).balanceOf(address(this));
         if (weth9Balance > 0) IWETH9(WETH9).withdraw(weth9Balance);
-        TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+
+        amountOut = address(this).balance;
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
 
     /**
-     * @notice swap tokens from the curve pools
+     * @notice Swap tokens from the curve pools.
+     * @param tokenIn The input token address.
+     * @param amountIn The amount of input tokens.
+     * @return amountOut The amount of output tokens.
      */
     function swapCurve(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         address pool = _getCurvePool(tokenIn);
         (address token0, address token1) = _getCurvPoolTokens(pool);
         address tokenOut = token0 == tokenIn ? token1 : token0;
 
-        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn, tokenOut);
-        uint256 amountOutMinimum = _getMinimumAmount(tokenOut, quoteOut);
+        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn);
+        uint256 amountOutMinimum = getMinimumAmount(tokenOut, quoteOut);
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
-        TransferHelper.safeApprove(tokenIn, pool, amountIn);
+        IERC20(tokenIn).forceApprove(pool, amountIn);
 
         (int128 _inIdx, int128 _outIdx) = _getCurveTokenIndex(pool, tokenIn);
         amountOut = ICurvePool(pool).exchange(_inIdx, _outIdx, amountIn, amountOutMinimum);
-        TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+
+        amountOut = address(this).balance;
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
 
     // [internal functions]
@@ -140,14 +169,15 @@ contract SwapManager is Ownable {
 
     function _getCurveTokenIndex(address pool, address tokenIn) internal view returns (int128 _inIdx, int128 _outIdx) {
         (address token0,) = _getCurvPoolTokens(pool);
-        int128 _i0 = int128(0);
-        int128 _i1 = int128(1);
+        int128 _i0 = int128(int256(ZERO));
+        int128 _i1 = int128(int256(ONE));
         return token0 == tokenIn ? (_i0, _i1) : (_i1, _i0);
     }
 
-    function _getMinimumAmount(address token, uint256 amount) internal view returns (uint256) {
+    function getMinimumAmount(address token, uint256 amount) public view returns (uint256) {
         if (slippage[token] == 0) revert SwapManager__SlippageNotSet();
-        return (amount * slippage[token]) / ONE_HUNDRED_PERCENT;
+        uint256 oneMinusSlippage = ONE_HUNDRED_PERCENT - slippage[token];
+        return FullMath.mulDiv(amount, oneMinusSlippage, ONE_HUNDRED_PERCENT);
     }
 
     function _getCurvPoolTokens(address pool) internal view returns (address token0, address token1) {
@@ -171,13 +201,13 @@ contract SwapManager is Ownable {
         if (sqrtRatioX96 <= type(uint128).max) {
             uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
-                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
+                ? FullMath.mulDiv(ratioX192, baseAmount, ONE << 192)
+                : FullMath.mulDiv(ONE << 192, baseAmount, ratioX192);
         } else {
-            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, 1 << 64);
+            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, ONE << 64);
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
-                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
+                ? FullMath.mulDiv(ratioX128, baseAmount, ONE << 128)
+                : FullMath.mulDiv(ONE << 128, baseAmount, ratioX128);
         }
     }
 
@@ -192,8 +222,9 @@ contract SwapManager is Ownable {
      */
     function getFairQuote(uint256 amountIn, address tokenIn) public view returns (DEX dexType, uint256 amountOut) {
         // estimate price using the twap
-        uint256 v3Out = estimateV3AmountOut(uint128(amountIn), tokenIn, WETH9);
-        uint256 curveOut = estimateCurveAmountOut(uint128(amountIn), tokenIn, NULL);
+        uint128 amountInUint128 = amountIn.toUint128();
+        uint256 v3Out = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
+        uint256 curveOut = estimateCurveAmountOut(amountInUint128, tokenIn);
         if (v3Out == 0 && curveOut == 0) revert SwapManager__NoLiquidity();
         return v3Out > curveOut ? (DEX.Uniswap, v3Out) : (DEX.Curve, curveOut);
     }
@@ -205,20 +236,10 @@ contract SwapManager is Ownable {
      * @param tokenIn The address of the input token
      * @return amountOut The estimated amount of output tokens
      */
-    function estimateCurveAmountOut(uint256 amountIn, address tokenIn, address)
-        public
-        view
-        returns (uint256 amountOut)
-    {
+    function estimateCurveAmountOut(uint256 amountIn, address tokenIn) public view returns (uint256 amountOut) {
         address pool = _getCurvePool(tokenIn);
-        (address token0,) = _getCurvPoolTokens(pool);
-        uint256 pricePerShare = ICurvePool(pool).get_virtual_price();
-
-        if (token0 == tokenIn) {
-            amountOut = (amountIn * pricePerShare) / DECIMAL_PRECISION;
-        } else {
-            amountOut = (amountIn * DECIMAL_PRECISION) / pricePerShare;
-        }
+        (int128 i, int128 j) = _getCurveTokenIndex(pool, tokenIn);
+        amountOut = ICurvePool(pool).get_dy(i, j, amountIn);
     }
 
     /**
@@ -244,7 +265,10 @@ contract SwapManager is Ownable {
         // 56 = 24 + 32
         (int56[] memory tickCumulatives,) = IUniswapV3Pool(pool).observe(secondsAgos);
 
-        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
+        int56 tickCumulativesDelta;
+        unchecked {
+            tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
+        }
 
         // int56 / uint32 = int24
         int24 tick = int24(tickCumulativesDelta / int32(secondsAgo));
@@ -261,7 +285,9 @@ contract SwapManager is Ownable {
         down
         */
         if (tickCumulativesDelta < 0 && (tickCumulativesDelta % int32(secondsAgo) != 0)) {
-            tick--;
+            unchecked {
+                tick--;
+            }
         }
 
         amountOut = _getQuoteAtTick(tick, amountIn, tokenIn, tokenOut);
@@ -277,12 +303,12 @@ contract SwapManager is Ownable {
      */
     function setWhitelistV3Pool(address _token, address _pool, uint24 _slippage) external onlyOwner {
         if (_token == address(0) || _pool == address(0)) revert SwapManager__ZeroAddress();
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
 
         (address token0, address token1) = (IUniswapV3Pool(_pool).token0(), IUniswapV3Pool(_pool).token1());
-        if ((token0 != WETH9 && token1 != WETH9) || ((token0 != _token && token1 != _token))) {
-            revert SwapManager__InvalidPoolToken();
-        }
+
+        if (token0 != _token && token0 != WETH9) revert SwapManager__InvalidPoolToken();
+        if (token1 != _token && token1 != WETH9) revert SwapManager__InvalidPoolToken();
 
         v3Pools[_token] = _pool;
         slippage[_token] = _slippage;
@@ -297,12 +323,12 @@ contract SwapManager is Ownable {
      */
     function setWhitelistCurvePool(address _token, address _pool, uint24 _slippage) external onlyOwner {
         if (_token == address(0) || _pool == address(0)) revert SwapManager__ZeroAddress();
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
 
         (address token0, address token1) = _getCurvPoolTokens(_pool);
-        if ((token0 != NULL && token1 != NULL) || ((token0 != _token && token1 != _token))) {
-            revert SwapManager__InvalidPoolToken();
-        }
+
+        if (token0 != _token && token0 != NULL) revert SwapManager__InvalidPoolToken();
+        if (token1 != _token && token1 != NULL) revert SwapManager__InvalidPoolToken();
 
         curvePools[_token] = _pool;
         slippage[_token] = _slippage;
@@ -315,7 +341,7 @@ contract SwapManager is Ownable {
      * @param _slippage The slippage tolerance for the token
      */
     function setTokenSlippage(address _token, uint24 _slippage) external onlyOwner {
-        if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
+        if (_slippage > MAX_SLIPPAGE) revert SwapManager__ExceedPercentage(_slippage, MAX_SLIPPAGE);
         slippage[_token] = _slippage;
         emit TokenSlippageUpdated(_token, _slippage);
     }

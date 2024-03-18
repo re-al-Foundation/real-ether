@@ -39,10 +39,11 @@ contract StrategyManager {
         uint256 amount;
     }
 
+    uint256 internal cumulativeRatio;
     uint256 internal constant ONE = 1;
     uint256 internal constant DUST = 100_00;
-    uint256 internal constant MINIMUM_ALLOCATION = 10_000; // 1%
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1000_000; // 100%
+    uint256 internal constant MINIMUM_ALLOCATION = 100_00; // 1%
+    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000; // 100%
 
     address public realVault;
     address payable public immutable assetsVault;
@@ -107,9 +108,8 @@ contract StrategyManager {
      */
     function setNewVault(address _vault) external onlyVault {
         if (_vault == address(0)) revert StrategyManager__ZeroAddress();
-        address _oldRealVault = realVault;
+        emit VaultUpdated(realVault, _vault);
         realVault = _vault;
-        emit VaultUpdated(_oldRealVault, _vault);
     }
 
     /**
@@ -167,7 +167,9 @@ contract StrategyManager {
 
             actualAmount = balanceBeforeRepay;
         } else {
-            actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+            unchecked {
+                actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+            }
         }
     }
 
@@ -210,7 +212,7 @@ contract StrategyManager {
             IAssetsVault(assetsVault).withdraw(address(this), _in);
         }
 
-        uint256 total = getAllStrategyValidValue();
+        (uint256 total, uint256[] memory strategiesValue) = getAllStrategyInvestedValue();
         if (total < _out) {
             total = 0;
         } else {
@@ -220,34 +222,51 @@ contract StrategyManager {
         uint256 length = strategies.length();
         StrategySnapshot[] memory snapshots = new StrategySnapshot[](length);
         uint256 head;
-        uint256 tail = length - ONE;
+        uint256 tail = length;
 
-        for (uint256 i; i < length; i++) {
+        for (uint256 i; i < length;) {
             address strategy = strategies.at(i);
-            if (ratios[strategy] == 0) {
+            uint256 ratio = ratios[strategy];
+            if (ratio == 0) {
                 _clearStrategy(strategy, true);
+
+                unchecked {
+                    i++;
+                }
+
                 continue;
             }
-            uint256 newPosition = (total * ratios[strategy]) / ONE_HUNDRED_PERCENT;
-            uint256 position = getStrategyValidValue(strategy);
+            uint256 newPosition = (total * ratio) / ONE_HUNDRED_PERCENT;
+            uint256 position = strategiesValue[i];
 
             if (newPosition < position) {
-                snapshots[head] = StrategySnapshot(strategy, false, position - newPosition);
-                head++;
-            } else if (newPosition > position) {
-                snapshots[tail] = StrategySnapshot(strategy, true, newPosition - position);
-                if (tail != 0) {
-                    tail--;
+                unchecked {
+                    snapshots[head] =
+                        StrategySnapshot({strategy: strategy, isDeposit: false, amount: position - newPosition});
+                    head++;
                 }
+            } else if (newPosition > position) {
+                unchecked {
+                    tail--;
+                    snapshots[tail] =
+                        StrategySnapshot({strategy: strategy, isDeposit: true, amount: newPosition - position});
+                }
+            }
+
+            unchecked {
+                i++;
             }
         }
 
         // update the strategy invested value based on latest position
-        length = snapshots.length;
-        for (uint256 i; i < length; i++) {
+        for (uint256 i; i < length;) {
             StrategySnapshot memory snapshot = snapshots[i];
 
             if (snapshot.amount == 0) {
+                unchecked {
+                    i++;
+                }
+
                 continue;
             }
 
@@ -258,6 +277,10 @@ contract StrategyManager {
                 _depositToStrategy(snapshot.strategy, snapshot.amount);
             } else {
                 _withdrawFromStrategy(snapshot.strategy, snapshot.amount);
+            }
+
+            unchecked {
+                i++;
             }
         }
 
@@ -281,7 +304,7 @@ contract StrategyManager {
         for (uint256 i; i < length;) {
             address strategy = strategies.at(i);
 
-            uint256 withAmount = (_amount * ratios[strategy]) / ONE_HUNDRED_PERCENT;
+            uint256 withAmount = (_amount * ratios[strategy]) / cumulativeRatio;
 
             if (withAmount != 0) {
                 actualAmount = IStrategy(strategy).instantWithdraw(withAmount) + actualAmount;
@@ -328,14 +351,18 @@ contract StrategyManager {
             // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
-            ratios[_strategies[i]] = _ratios[i];
-            totalRatio = totalRatio + _ratios[i];
+
+            if (ratios[_strategies[i]] == 0) {
+                ratios[_strategies[i]] = _ratios[i];
+                totalRatio = totalRatio + _ratios[i];
+            }
 
             unchecked {
                 i++;
             }
         }
 
+        cumulativeRatio = totalRatio;
         if (totalRatio > ONE_HUNDRED_PERCENT) revert StrategyManager__InvalidPercentage();
     }
 
@@ -347,8 +374,12 @@ contract StrategyManager {
     function _setStrategies(address[] memory _strategies, uint256[] memory _ratios) internal {
         // reset old strategies ratio
         uint256 oldLength = strategies.length();
-        for (uint256 i; i < oldLength; i++) {
+        for (uint256 i; i < oldLength;) {
             ratios[strategies.at(i)] = 0;
+
+            unchecked {
+                i++;
+            }
         }
 
         // load new strategies
@@ -386,7 +417,7 @@ contract StrategyManager {
      * @return status A boolean indicating whether the strategy can be destroyed.
      */
     function _couldDestroyStrategy(address _strategy) internal view returns (bool status) {
-        return ratios[_strategy] == 0 && IStrategy(_strategy).getAllValue() < DUST;
+        return ratios[_strategy] == 0 && IStrategy(_strategy).getTotalValue() < DUST;
     }
 
     // [View Functions]
@@ -397,7 +428,7 @@ contract StrategyManager {
      * @return _value The total value of the strategy.
      */
     function getStrategyValue(address _strategy) public view returns (uint256 _value) {
-        return IStrategy(_strategy).getAllValue();
+        return IStrategy(_strategy).getTotalValue();
     }
 
     /**
@@ -405,7 +436,7 @@ contract StrategyManager {
      * @param _strategy The address of the strategy.
      * @return _value The valid value of the strategy.
      */
-    function getStrategyValidValue(address _strategy) public view returns (uint256 _value) {
+    function getStrategyInvestedValue(address _strategy) public view returns (uint256 _value) {
         return IStrategy(_strategy).getInvestedValue();
     }
 
@@ -436,10 +467,14 @@ contract StrategyManager {
      * @notice Gets the total invested asset value of all strategies.
      * @return _value The total valid value of all strategies.
      */
-    function getAllStrategyValidValue() public view returns (uint256 _value) {
+    function getAllStrategyInvestedValue() public view returns (uint256 _value, uint256[] memory strategiesValue) {
         uint256 length = strategies.length();
+        strategiesValue = new uint256[](length);
+
         for (uint256 i; i < length;) {
-            _value = _value + getStrategyValidValue(strategies.at(i));
+            uint256 value_ = getStrategyInvestedValue(strategies.at(i));
+            strategiesValue[i] = value_;
+            _value = _value + value_;
             unchecked {
                 i++;
             }
