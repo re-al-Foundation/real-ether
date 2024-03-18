@@ -553,7 +553,6 @@ contract RealVault is ReentrancyGuard, Ownable {
     ) private returns (WithdrawReceipt memory) {
         uint256 withdrawAmount =
             ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
-        console2.log(withdrawAmount);
 
         realEthMinter.burn(address(this), mReceipt.withdrawShares);
         withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
