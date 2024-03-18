@@ -100,9 +100,16 @@ contract SwapManager is Ownable {
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
         TransferHelper.safeApprove(tokenIn, v3SwapRouter, amountIn);
         amountOut = ISwapRouter(v3SwapRouter).exactInputSingle(
-            ISwapRouter.ExactInputSingleParams(
-                tokenIn, WETH9, poolFee, address(this), deadline, amountIn, amountOutMinimum, 0
-            )
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: WETH9,
+                fee: poolFee,
+                recipient: address(this),
+                deadline: deadline,
+                amountIn: amountIn,
+                amountOutMinimum: amountOutMinimum,
+                sqrtPriceLimitX96: 0
+            })
         );
 
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
