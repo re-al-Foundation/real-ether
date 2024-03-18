@@ -83,8 +83,6 @@ contract TestEthStrategyTest is Test {
         realVault.deposit{value: 30 ether}();
         vm.stopPrank();
 
-        console.log("QQQQ", address(assetsVault).balance);
-
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
         // roll epoch to Round#2
@@ -99,9 +97,6 @@ contract TestEthStrategyTest is Test {
         vm.warp(block.timestamp + realVault.rebaseTimeInterval());
         // roll epoch to Round#2
         realVault.rollToNextRound();
-
-        console.log("PPS", realVault.currentSharePrice());
-        (uint256 a1, uint256 a2) = realVault.getVaultAvailableAmount();
-        console.log("getVaultAvailableAmount", a1, a2);
+        assertEq(realVault.currentSharePrice(), 1.125 ether);
     }
 }

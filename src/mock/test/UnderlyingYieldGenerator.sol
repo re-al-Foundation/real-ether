@@ -2,7 +2,6 @@
 pragma solidity =0.8.21;
 
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-import {Test, console2 as console} from "forge-std/Test.sol";
 
 contract UnderlyingYieldGenerator {
     error EthYield__ZeroAmount();
@@ -24,8 +23,6 @@ contract UnderlyingYieldGenerator {
         actualAmount = _ethAmount;
         // inflate the vault eth
         TransferHelper.safeTransferETH(assetVault, 10 ether);
-
-        console.log("RRR", assetVault.balance);
     }
 
     receive() external payable {}
