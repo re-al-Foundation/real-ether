@@ -17,7 +17,7 @@ error AssetsVault__InvalidAmount();
  */
 contract AssetsVault {
     address public realVault;
-    address public strategyManager;
+    address public immutable strategyManager;
 
     event VaultUpdated(address oldRealVault, address newRealVault);
 
@@ -36,7 +36,7 @@ contract AssetsVault {
      */
     constructor(address _realVault, address _strategyManager) {
         if (_realVault == address(0) || _strategyManager == address(0)) revert AssetsVault__ZeroAddress();
-        
+
         realVault = _realVault;
         strategyManager = _strategyManager;
     }

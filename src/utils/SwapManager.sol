@@ -82,7 +82,10 @@ contract SwapManager is Ownable {
     }
 
     /**
-     * @notice swap tokens from the uniswap v3 pools
+     * @notice Swap tokens from the uniswap v3 pools.
+     * @param tokenIn The input token address.
+     * @param amountIn The amount of input tokens.
+     * @return amountOut The amount of output tokens.
      */
     function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         // estimate price using the twap
@@ -109,7 +112,10 @@ contract SwapManager is Ownable {
     }
 
     /**
-     * @notice swap tokens from the curve pools
+     * @notice Swap tokens from the curve pools.
+     * @param tokenIn The input token address.
+     * @param amountIn The amount of input tokens.
+     * @return amountOut The amount of output tokens.
      */
     function swapCurve(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
         address pool = _getCurvePool(tokenIn);

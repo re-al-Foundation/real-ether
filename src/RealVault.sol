@@ -245,10 +245,11 @@ contract RealVault is ReentrancyGuard, Ownable {
                 _updateUserReceipt(receipt, mReceipt, realEthMinter, 0, 0);
             }
 
-            if (receipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
+            mReceipt = receipt;
+            if (mReceipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
 
             unchecked {
-                receipt.withdrawableAmount = receipt.withdrawableAmount - _amount;
+                receipt.withdrawableAmount = mReceipt.withdrawableAmount - _amount;
             }
 
             withdrawableAmountInPast = withdrawableAmountInPast - _amount;
