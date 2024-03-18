@@ -21,7 +21,6 @@ library ShareMath {
     function assetToShares(uint256 assetAmount, uint256 assetPerShare) internal pure returns (uint256) {
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
         return FullMath.mulDiv(assetAmount, _decimalOffset, assetPerShare);
-
     }
 
     /**

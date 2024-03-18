@@ -62,10 +62,8 @@ abstract contract Strategy {
 
     /**
      * @dev Execute pending request function to execute any pending transactions in the strategy.
-     * @param _amount The amount of funds to execute pending requests.
-     * @return amount The amount of funds executed.
      */
-    function execPendingRequest(uint256 _amount) public virtual returns (uint256 amount);
+    function claimAllPendingAssets() external virtual;
 
     /**
      * @dev Get all value function to get the total value of assets held in the strategy.

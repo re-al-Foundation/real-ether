@@ -232,7 +232,7 @@ contract LidoStEthStrategy is Strategy {
      * which is 365 requests in a year for a 1-day epoch cycle or 52 requests in a year for a 7-day epoch cycle
      * If the queue expands to a level where withdrawQueue consumes excessive gas, use claimAllPendingAssetsByIds instead.
      */
-    function claimAllPendingAssets() external {
+    function claimAllPendingAssets() external  override{
         uint256[] memory withdrawIds = withdrawQueue.values();
         (uint256[] memory ids,,) = checkPendingAssets(withdrawIds);
 
@@ -438,8 +438,6 @@ contract LidoStEthStrategy is Strategy {
         (, uint256 claimableValue, uint256 pendingValue) = checkPendingAssets();
         value = claimableValue + pendingValue;
     }
-
-    function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
 
     receive() external payable {}
 }

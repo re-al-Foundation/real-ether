@@ -46,6 +46,8 @@ contract TestEthStrategyTest is Test {
         assetVaultAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 3);
         strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 6);
 
+        deal(realVaultAddress, 0.001 ether);
+
         real = new Real(minterAddress);
         minter = new Minter(address(real), payable(realVaultAddress));
         realVault = new RealVault(
@@ -68,6 +70,10 @@ contract TestEthStrategyTest is Test {
         strategyManager = new StrategyManager(address(realVault), payable(assetVaultAddress), strategies, ratios);
 
         epoch0 = block.timestamp;
+
+        vm.startPrank(address(0xdead));
+        realVault.instantWithdraw(0, 0.001 ether);
+        vm.stopPrank();
     }
 
     function test_InflatePPS() external {

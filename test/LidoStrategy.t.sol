@@ -86,6 +86,8 @@ contract LidoStrategyTest is Test {
         strategyManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 5);
         swapManagerAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 6);
 
+        deal(realVaultAddress, 0.001 ether);
+
         real = new Real(minterAddress);
         minter = new Minter(address(real), payable(realVaultAddress));
         realVault = new RealVault(
@@ -129,6 +131,10 @@ contract LidoStrategyTest is Test {
         vm.startPrank(deadShares.addr);
 
         realVault.deposit{value: 1 ether}();
+        vm.stopPrank();
+
+        vm.startPrank(address(0xdead));
+        realVault.instantWithdraw(0, 0.001 ether);
         vm.stopPrank();
     }
 

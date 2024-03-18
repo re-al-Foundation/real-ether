@@ -30,7 +30,7 @@ contract TestEthClaimableStrategy is Strategy {
         TransferHelper.safeTransferETH(manager, address(this).balance);
     }
 
-    function claimAllPendingAssets() external {
+    function claimAllPendingAssets() external override {
         uint256 _amount = pendingReserve;
         pendingReserve = 0;
         TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), _amount);
@@ -69,7 +69,7 @@ contract TestEthClaimableStrategy is Strategy {
         value = 0;
     }
 
-    function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
+    // function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
 
     function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
 }

@@ -27,14 +27,14 @@ contract TestEthStrategyInflate is Strategy {
 
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
-        if (_ethAmount > getAllValue()) revert Strategy__InsufficientBalance();
+        if (_ethAmount > getTotalValue()) revert Strategy__InsufficientBalance();
 
         actualAmount = IUnderLying(underlying).withdraw(_ethAmount);
         TransferHelper.safeTransferETH(manager, _ethAmount);
     }
 
     function clear() external override onlyManager returns (uint256 amount) {
-        amount = getAllValue();
+        amount = getTotalValue();
         TransferHelper.safeTransferETH(manager, amount);
     }
 
@@ -42,7 +42,7 @@ contract TestEthStrategyInflate is Strategy {
         amount = address(this).balance;
     }
 
-    function getAllValue() public view override returns (uint256 value) {
+    function getTotalValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 
@@ -61,6 +61,10 @@ contract TestEthStrategyInflate is Strategy {
     function getClaimableAndPendingValue() public pure returns (uint256 value) {
         value = 0;
     }
+
+    function claimAllPendingAssets() external virtual override {}
+
+    function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
 
     receive() external payable {}
 }
