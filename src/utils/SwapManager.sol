@@ -35,9 +35,9 @@ contract SwapManager is Ownable {
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint32 public twapDuration;
 
-    address public NULL;
-    address public WETH9;
-    address public v3SwapRouter;
+    address public immutable NULL;
+    address public immutable WETH9;
+    address public immutable v3SwapRouter;
 
     // token => pool
     mapping(address => address) public v3Pools;
@@ -72,9 +72,7 @@ contract SwapManager is Ownable {
 
         if (dexType == DEX.Uniswap) {
             amountOut = swapUinv3(tokenIn, amountIn);
-        }
-
-        if (dexType == DEX.Curve) {
+        } else {
             amountOut = swapCurve(tokenIn, amountIn);
         }
 
@@ -144,8 +142,8 @@ contract SwapManager is Ownable {
 
     function _getCurveTokenIndex(address pool, address tokenIn) internal view returns (int128 _inIdx, int128 _outIdx) {
         (address token0,) = _getCurvPoolTokens(pool);
-        int128 _i0 = int128(0);
-        int128 _i1 = int128(1);
+        int128 _i0 = int128(int256(ZERO));
+        int128 _i1 = int128(int256(ONE));
         return token0 == tokenIn ? (_i0, _i1) : (_i1, _i0);
     }
 
@@ -175,13 +173,13 @@ contract SwapManager is Ownable {
         if (sqrtRatioX96 <= type(uint128).max) {
             uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
-                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
+                ? FullMath.mulDiv(ratioX192, baseAmount, ONE << 192)
+                : FullMath.mulDiv(ONE << 192, baseAmount, ratioX192);
         } else {
-            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, 1 << 64);
+            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, ONE << 64);
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
-                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
+                ? FullMath.mulDiv(ratioX128, baseAmount, ONE << 128)
+                : FullMath.mulDiv(ONE << 128, baseAmount, ratioX128);
         }
     }
 
@@ -274,7 +272,7 @@ contract SwapManager is Ownable {
         if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
 
         (address token0, address token1) = (IUniswapV3Pool(_pool).token0(), IUniswapV3Pool(_pool).token1());
-        if ((token0 != WETH9 && token1 != WETH9) || ((token0 != _token && token1 != _token))) {
+        if ((token0 != WETH9 && token1 != WETH9) || (token0 != _token && token1 != _token)) {
             revert SwapManager__InvalidPoolToken();
         }
 
@@ -294,7 +292,7 @@ contract SwapManager is Ownable {
         if (_slippage > ONE_HUNDRED_PERCENT) revert SwapManager__ExceedPercentage(_slippage, ONE_HUNDRED_PERCENT);
 
         (address token0, address token1) = _getCurvPoolTokens(_pool);
-        if ((token0 != NULL && token1 != NULL) || ((token0 != _token && token1 != _token))) {
+        if ((token0 != NULL && token1 != NULL) || (token0 != _token && token1 != _token)) {
             revert SwapManager__InvalidPoolToken();
         }
 
