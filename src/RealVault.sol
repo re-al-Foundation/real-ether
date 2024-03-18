@@ -83,15 +83,15 @@ contract RealVault is ReentrancyGuard, Ownable {
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
     event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
     event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
-    event VaultMigrated(address oldVault, address newVault);
-    event StragetyAdded(address strategy);
-    event StragetyDestroyed(address strategy);
-    event StragetyCleared(address strategy);
-    event InvestmentPortfolioUpdated(address[] strategies, uint256[] ratios);
+    event VaultMigrated(address indexed oldVault, address newVault);
+    event StragetyAdded(address indexed strategy);
+    event StragetyDestroyed(address indexed strategy);
+    event StragetyCleared(address indexed strategy);
+    event InvestmentPortfolioUpdated(address[] indexed strategies, uint256[] indexed ratios);
     event FeeCharged(address indexed account, uint256 amount);
-    event SetWithdrawFeeRate(uint256 oldRate, uint256 newRate);
-    event SetFeeRecipient(address oldAddr, address newAddr);
-    event SetRebaseInterval(uint256 interval);
+    event SetWithdrawFeeRate(uint256 indexed oldRate, uint256 newRate);
+    event SetFeeRecipient(address indexed oldAddr, address newAddr);
+    event SetRebaseInterval(uint256 indexed interval);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.
