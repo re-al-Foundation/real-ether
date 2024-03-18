@@ -65,32 +65,32 @@ abstract contract Strategy {
      * @param _amount The amount of funds to execute pending requests.
      * @return amount The amount of funds executed.
      */
-    function execPendingRequest(uint256 _amount) public virtual returns (uint256 amount) {}
+    function execPendingRequest(uint256 _amount) public virtual returns (uint256 amount);
 
     /**
      * @dev Get all value function to get the total value of assets held in the strategy.
      * @return value The total value of assets held in the strategy.
      */
-    function getAllValue() public virtual returns (uint256 value) {}
+    function getTotalValue() public virtual returns (uint256 value);
 
     /**
      * @dev Get pending value function to get the pending value of assets in the strategy.
      * @return value The pending value of assets in the strategy.
      */
-    function getPendingValue() public virtual returns (uint256 value) {}
+    function getPendingValue() public virtual returns (uint256 value);
 
     /**
      * @dev Get invested value function to get the currently invested value of assets in the strategy.
      * @return value The currently invested value of assets in the strategy.
      */
-    function getInvestedValue() public virtual returns (uint256 value) {}
+    function getInvestedValue() public virtual returns (uint256 value);
 
     /**
      * @dev Check pending status function to check the status of pending transactions in the strategy.
      * @return pending The amount of pending transactions.
      * @return executable The claimable amount of transactions ready to be executed.
      */
-    function checkPendingStatus() external virtual returns (uint256 pending, uint256 executable) {}
+    function checkPendingStatus() external virtual returns (uint256 pending, uint256 executable);
 
     /**
      * @dev Sets the governance address.

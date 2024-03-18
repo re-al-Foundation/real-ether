@@ -8,7 +8,7 @@ error Minter__ZeroAddress();
 error Minter__NotVault();
 
 contract Minter {
-    address public real;
+    address public immutable real;
     address payable public vault;
 
     event VaultUpdated(address oldRealVault, address newRealVault);

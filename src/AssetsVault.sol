@@ -17,7 +17,7 @@ error AssetsVault__InvalidAmount();
  */
 contract AssetsVault {
     address public realVault;
-    address public strategyManager;
+    address public immutable strategyManager;
 
     event VaultUpdated(address oldRealVault, address newRealVault);
 

@@ -39,7 +39,7 @@ interface IStrategy {
      * @dev Retrieves the total value managed by the strategy.
      * @return value The total value managed by the strategy.
      */
-    function getAllValue() external view returns (uint256 value);
+    function getTotalValue() external view returns (uint256 value);
 
     /**
      * @dev Retrieves the amount of funds currently invested in the strategy.

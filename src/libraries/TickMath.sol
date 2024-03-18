@@ -67,7 +67,9 @@ library TickMath {
     function getTickAtSqrtRatio(uint160 sqrtPriceX96) internal pure returns (int24 tick) {
         unchecked {
             // second inequality must be < because the price can never reach the price at the max tick
-            if (!(sqrtPriceX96 >= MIN_SQRT_RATIO && sqrtPriceX96 < MAX_SQRT_RATIO)) revert R();
+
+            if (sqrtPriceX96 < MIN_SQRT_RATIO || sqrtPriceX96 >= MAX_SQRT_RATIO) revert R();
+
             uint256 ratio = uint256(sqrtPriceX96) << 32;
 
             uint256 r = ratio;

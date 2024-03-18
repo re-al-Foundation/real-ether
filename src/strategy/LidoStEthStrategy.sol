@@ -398,7 +398,7 @@ contract LidoStEthStrategy is Strategy {
      * @dev This function retrieves the total value of assets managed by the strategy, including invested, claimable, and pending values.
      * @return value The total value of assets managed by the strategy.
      */
-    function getAllValue() public view override returns (uint256 value) {
+    function getTotalValue() public view override returns (uint256 value) {
         value = getInvestedValue() + getClaimableAndPendingValue();
     }
 
@@ -438,6 +438,8 @@ contract LidoStEthStrategy is Strategy {
         (, uint256 claimableValue, uint256 pendingValue) = checkPendingAssets();
         value = claimableValue + pendingValue;
     }
+
+    function execPendingRequest(uint256 _amount) public override returns (uint256 amount) {}
 
     receive() external payable {}
 }

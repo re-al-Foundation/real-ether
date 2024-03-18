@@ -4,7 +4,8 @@ pragma solidity =0.8.21;
 import {FullMath} from "./FullMath.sol";
 
 library ShareMath {
-    uint256 internal constant decimals = 18;
+    uint256 internal constant _decimals = 18;
+    uint256 internal constant _decimalOffset = 10 ** _decimals;
     uint256 internal constant PLACEHOLDER_UINT = 1;
 
     /**
@@ -19,7 +20,8 @@ library ShareMath {
      */
     function assetToShares(uint256 assetAmount, uint256 assetPerShare) internal pure returns (uint256) {
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return FullMath.mulDiv(assetAmount, 10 ** decimals, assetPerShare);
+        return FullMath.mulDiv(assetAmount, _decimalOffset, assetPerShare);
+
     }
 
     /**
@@ -30,6 +32,6 @@ library ShareMath {
      */
     function sharesToAsset(uint256 shares, uint256 assetPerShare) internal pure returns (uint256) {
         require(assetPerShare > PLACEHOLDER_UINT, "ShareMath Lib: Invalid assetPerShare");
-        return FullMath.mulDiv(shares, assetPerShare, 10 ** decimals);
+        return FullMath.mulDiv(shares, assetPerShare, _decimalOffset);
     }
 }

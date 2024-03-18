@@ -83,15 +83,15 @@ contract RealVault is ReentrancyGuard, Ownable {
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
     event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
     event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
-    event VaultMigrated(address oldVault, address newVault);
-    event StragetyAdded(address strategy);
-    event StragetyDestroyed(address strategy);
-    event StragetyCleared(address strategy);
-    event InvestmentPortfolioUpdated(address[] strategies, uint256[] ratios);
+    event VaultMigrated(address indexed oldVault, address newVault);
+    event StragetyAdded(address indexed strategy);
+    event StragetyDestroyed(address indexed strategy);
+    event StragetyCleared(address indexed strategy);
+    event InvestmentPortfolioUpdated(address[] indexed strategies, uint256[] indexed ratios);
     event FeeCharged(address indexed account, uint256 amount);
-    event SetWithdrawFeeRate(uint256 oldRate, uint256 newRate);
-    event SetFeeRecipient(address oldAddr, address newAddr);
-    event SetRebaseInterval(uint256 interval);
+    event SetWithdrawFeeRate(uint256 indexed oldRate, uint256 newRate);
+    event SetFeeRecipient(address indexed oldAddr, address newAddr);
+    event SetRebaseInterval(uint256 indexed interval);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.
@@ -107,10 +107,9 @@ contract RealVault is ReentrancyGuard, Ownable {
         address payable _strategyManager,
         address _proposal
     ) Ownable(_intialOwner) {
-        if (
-            _minter == address(0) || _proposal == address(0) || _assetsVault == address(0)
-                || _strategyManager == address(0)
-        ) revert RealVault__ZeroAddress();
+        if (_proposal == address(0) || _assetsVault == address(0) || _strategyManager == address(0)) {
+            revert RealVault__ZeroAddress();
+        }
 
         minter = _minter;
         proposal = _proposal;
@@ -167,31 +166,22 @@ contract RealVault is ReentrancyGuard, Ownable {
         IMinter realEthMinter = IMinter(minter);
 
         if (realToken.balanceOf(msg.sender) < _shares) revert RealVault__ExceedBalance();
-
         TransferHelper.safeTransferFrom(real, msg.sender, address(this), _shares);
 
         withdrawingSharesInRound = withdrawingSharesInRound + _shares;
+        WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
 
-        WithdrawReceipt storage receipt = userReceipts[msg.sender];
-
-        if (receipt.withdrawRound == _latestRoundID) {
-            receipt.withdrawShares = receipt.withdrawShares + _shares;
-        } else if (receipt.withdrawRound == 0) {
-            receipt.withdrawShares = _shares;
-            receipt.withdrawRound = _latestRoundID;
+        if (mReceipt.withdrawRound == _latestRoundID) {
+            mReceipt.withdrawShares = mReceipt.withdrawShares + _shares;
+        } else if (mReceipt.withdrawRound == 0) {
+            mReceipt.withdrawShares = _shares;
+            mReceipt.withdrawRound = _latestRoundID;
         } else {
             // Withdraw previous round share first
-            uint256 withdrawAmount =
-                ShareMath.sharesToAsset(receipt.withdrawShares, roundPricePerShare[receipt.withdrawRound]);
-
-            realEthMinter.burn(address(this), receipt.withdrawShares);
-            withdrawingSharesInPast = withdrawingSharesInPast - receipt.withdrawShares;
-
-            receipt.withdrawShares = _shares;
-            receipt.withdrawableAmount = receipt.withdrawableAmount + withdrawAmount;
-            receipt.withdrawRound = _latestRoundID;
+            mReceipt = _updateUserReceipt(mReceipt, realEthMinter, _shares, _latestRoundID);
         }
 
+        userReceipts[msg.sender] = mReceipt;
         emit InitiateWithdraw(msg.sender, _shares, _latestRoundID);
     }
 
@@ -202,21 +192,25 @@ contract RealVault is ReentrancyGuard, Ownable {
     function cancelWithdraw(uint256 _shares) external nonReentrant {
         if (_shares == 0) revert RealVault__InvalidAmount();
 
-        WithdrawReceipt storage receipt = userReceipts[msg.sender];
-
+        WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
         uint256 _latestRoundID = latestRoundID;
 
-        if (receipt.withdrawRound != _latestRoundID) revert RealVault__NoRequestFound();
-        if (_shares > receipt.withdrawShares) revert RealVault__ExceedRequestedAmount(_shares, receipt.withdrawShares);
+        if (mReceipt.withdrawRound != _latestRoundID) revert RealVault__NoRequestFound();
+        if (_shares > mReceipt.withdrawShares) {
+            revert RealVault__ExceedRequestedAmount(_shares, mReceipt.withdrawShares);
+        }
 
-        receipt.withdrawShares = receipt.withdrawShares - _shares;
+        unchecked {
+            mReceipt.withdrawShares -= _shares;
+        }
 
         TransferHelper.safeTransfer(real, msg.sender, _shares);
 
-        if (receipt.withdrawShares == 0) {
-            receipt.withdrawRound = 0;
+        if (mReceipt.withdrawShares == 0) {
+            mReceipt.withdrawRound = 0;
         }
 
+        userReceipts[msg.sender] = mReceipt;
         withdrawingSharesInRound = withdrawingSharesInRound - _shares;
 
         emit CancelWithdraw(msg.sender, _shares, _latestRoundID);
@@ -242,24 +236,21 @@ contract RealVault is ReentrancyGuard, Ownable {
         (uint256 idleAmount,) = getVaultAvailableAmount();
 
         if (_amount != 0) {
-            WithdrawReceipt storage receipt = userReceipts[msg.sender];
+            WithdrawReceipt memory mReceipt = userReceipts[msg.sender];
 
-            if (receipt.withdrawRound != _latestRoundID && receipt.withdrawRound != 0) {
+            if (mReceipt.withdrawRound != _latestRoundID && mReceipt.withdrawRound != 0) {
                 // Withdraw previous round share first
-                uint256 withdrawAmount =
-                    ShareMath.sharesToAsset(receipt.withdrawShares, roundPricePerShare[receipt.withdrawRound]);
-
-                realEthMinter.burn(address(this), receipt.withdrawShares);
-
-                withdrawingSharesInPast = withdrawingSharesInPast - receipt.withdrawShares;
-                receipt.withdrawShares = 0;
-                receipt.withdrawableAmount = receipt.withdrawableAmount + withdrawAmount;
-                receipt.withdrawRound = 0;
+                mReceipt = _updateUserReceipt(mReceipt, realEthMinter, 0, 0);
             }
 
-            if (receipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
+            if (mReceipt.withdrawableAmount < _amount) revert RealVault__ExceedWithdrawAmount();
 
-            receipt.withdrawableAmount = receipt.withdrawableAmount - _amount;
+            unchecked {
+                mReceipt.withdrawableAmount -= _amount;
+            }
+
+            userReceipts[msg.sender] = mReceipt;
+
             withdrawableAmountInPast = withdrawableAmountInPast - _amount;
             actualWithdrawn = _amount;
 
@@ -273,8 +264,11 @@ contract RealVault is ReentrancyGuard, Ownable {
                 sharePrice = MULTIPLIER;
             } else {
                 uint256 currSharePrice = currentSharePrice();
-                uint256 latestSharePrice = roundPricePerShare[_latestRoundID - ONE];
+                uint256 latestSharePrice;
 
+                unchecked {
+                    latestSharePrice = roundPricePerShare[_latestRoundID - ONE];
+                }
                 sharePrice = latestSharePrice < currSharePrice ? latestSharePrice : currSharePrice;
             }
 
@@ -288,7 +282,10 @@ contract RealVault is ReentrancyGuard, Ownable {
                 emit Withdrawn(msg.sender, ethAmount, _latestRoundID);
             } else {
                 actualWithdrawn = actualWithdrawn + idleAmount;
-                ethAmount = ethAmount - idleAmount;
+
+                unchecked {
+                    ethAmount = ethAmount - idleAmount;
+                }
 
                 IStrategyManager manager = IStrategyManager(strategyManager);
                 // if strategy sells the LSD token on the decentralized exchange (DEX),
@@ -310,7 +307,9 @@ contract RealVault is ReentrancyGuard, Ownable {
 
             emit FeeCharged(msg.sender, withFee);
         }
-        aVault.withdraw(msg.sender, actualWithdrawn - withFee);
+        unchecked {
+            aVault.withdraw(msg.sender, actualWithdrawn - withFee);
+        }
     }
 
     /**
@@ -333,9 +332,13 @@ contract RealVault is ReentrancyGuard, Ownable {
         uint256 vaultOut;
 
         if (vaultBalance > amountVaultNeed) {
-            vaultIn = vaultBalance - amountVaultNeed;
+            unchecked {
+                vaultIn = vaultBalance - amountVaultNeed;
+            }
         } else if (vaultBalance + allPendingValue < amountVaultNeed) {
-            vaultOut = amountVaultNeed - vaultBalance - allPendingValue;
+            unchecked {
+                vaultOut = amountVaultNeed - vaultBalance - allPendingValue;
+            }
         }
 
         manager.rebaseStrategies(vaultIn, vaultOut);
@@ -345,7 +348,9 @@ contract RealVault is ReentrancyGuard, Ownable {
         roundPricePerShare[_latestRoundID] = previewSharePrice < newSharePrice ? previewSharePrice : newSharePrice;
 
         settlementTime[_latestRoundID] = block.timestamp;
-        latestRoundID = _latestRoundID + ONE;
+        unchecked {
+            latestRoundID = _latestRoundID + ONE;
+        }
 
         withdrawingSharesInPast = withdrawingSharesInPast + withdrawingSharesInRound;
         withdrawableAmountInPast =
@@ -492,11 +497,14 @@ contract RealVault is ReentrancyGuard, Ownable {
      */
     function previewDeposit(uint256 assets) public view virtual returns (uint256) {
         uint256 sharePrice;
-        uint256 currSharePrice = currentSharePrice();
         if (latestRoundID == 0) {
             sharePrice = MULTIPLIER;
         } else {
-            uint256 latestSharePrice = roundPricePerShare[latestRoundID - ONE];
+            uint256 currSharePrice = currentSharePrice();
+            uint256 latestSharePrice;
+            unchecked {
+                latestSharePrice = roundPricePerShare[latestRoundID - ONE];
+            }
             sharePrice = latestSharePrice > currSharePrice ? latestSharePrice : currSharePrice;
         }
 
@@ -531,10 +539,31 @@ contract RealVault is ReentrancyGuard, Ownable {
         IAssetsVault vault = IAssetsVault(assetsVault);
 
         if (vault.getBalance() > withdrawableAmountInPast) {
-            idleAmount = vault.getBalance() - withdrawableAmountInPast;
+            unchecked {
+                idleAmount = vault.getBalance() - withdrawableAmountInPast;
+            }
         }
 
-        investedAmount = IStrategyManager(strategyManager).getAllStrategyValidValue();
+        investedAmount = IStrategyManager(strategyManager).getAllStrategyInvestedValue();
+    }
+
+    function _updateUserReceipt(
+        WithdrawReceipt memory mReceipt,
+        IMinter realEthMinter,
+        uint256 _shares,
+        uint256 _latestRoundID
+    ) private returns (WithdrawReceipt memory) {
+        uint256 withdrawAmount =
+            ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
+
+        realEthMinter.burn(address(this), mReceipt.withdrawShares);
+        withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
+
+        mReceipt.withdrawShares = _shares;
+        mReceipt.withdrawableAmount = mReceipt.withdrawableAmount + withdrawAmount;
+
+        mReceipt.withdrawRound = _latestRoundID;
+        return mReceipt;
     }
 
     receive() external payable {}
