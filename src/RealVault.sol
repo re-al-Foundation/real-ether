@@ -106,7 +106,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         address payable _assetsVault,
         address payable _strategyManager,
         address _proposal
-    ) Ownable(_intialOwner) {
+    ) payable Ownable(_intialOwner) {
         if (_proposal == address(0) || _assetsVault == address(0) || _strategyManager == address(0)) {
             revert RealVault__ZeroAddress();
         }

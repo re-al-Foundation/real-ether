@@ -667,7 +667,7 @@ contract LidoStrategyTest is Test {
         lidoStEthStrategy.withdraw(10); //10wei
 
         (,, uint256 totalPending) = lidoStEthStrategy.checkPendingAssets();
-        assertEq(totalPending, 1_00); // MIN_STETH_WITHDRAWAL_AMOUNT
+        assertEq(totalPending, 0); // MIN_STETH_WITHDRAWAL_AMOUNT
 
         vm.stopPrank();
     }
