@@ -52,7 +52,7 @@ contract StrategyManager {
 
     mapping(address => uint256) public ratios;
 
-    event VaultUpdated(address oldRealVault, address newRealVault);
+    event VaultUpdated(address indexed oldRealVault, address newRealVault);
 
     /**
      * @param _realVault Address of the RealVault contract.
