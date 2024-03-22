@@ -167,9 +167,11 @@ contract StrategyManager {
 
             actualAmount = balanceBeforeRepay;
         } else {
+            uint256 amount_;
             unchecked {
-                actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+                amount_ = _amount - balanceBeforeRepay;
             }
+            actualAmount = _forceWithdraw(amount_) + balanceBeforeRepay;
         }
     }
 
