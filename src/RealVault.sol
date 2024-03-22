@@ -544,7 +544,7 @@ contract RealVault is ReentrancyGuard, Ownable {
             }
         }
 
-        investedAmount = IStrategyManager(strategyManager).getAllStrategyInvestedValue();
+        investedAmount = IStrategyManager(strategyManager).getTotalInvestedValue();
     }
 
     function _updateUserReceipt(

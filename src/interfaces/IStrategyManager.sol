@@ -67,7 +67,7 @@ interface IStrategyManager {
      * @dev Retrieves the total valid value managed by all strategies.
      * @return amount The total valid value managed by all strategies.
      */
-    function getAllStrategyInvestedValue() external view returns (uint256 amount);
+    function getTotalInvestedValue() external view returns (uint256 amount);
 
     /**
      * @dev Retrieves the total pending value managed by all strategies.

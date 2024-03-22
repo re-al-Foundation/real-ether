@@ -212,7 +212,7 @@ contract StrategyManager {
             IAssetsVault(assetsVault).withdraw(address(this), _in);
         }
 
-        (uint256 total, uint256[] memory strategiesValue) = getAllStrategyInvestedValue();
+        (uint256 total, uint256[] memory strategiesValue) = getTotalInvestedValue();
         if (total < _out) {
             total = 0;
         } else {
@@ -467,7 +467,7 @@ contract StrategyManager {
      * @notice Gets the total invested asset value of all strategies.
      * @return _value The total valid value of all strategies.
      */
-    function getAllStrategyInvestedValue() public view returns (uint256 _value, uint256[] memory strategiesValue) {
+    function getTotalInvestedValue() public view returns (uint256 _value, uint256[] memory strategiesValue) {
         uint256 length = strategies.length();
         strategiesValue = new uint256[](length);
 
