@@ -41,7 +41,7 @@ error RealVault__MinimumRebaseInterval(uint256 minInterval);
 contract RealVault is ReentrancyGuard, Ownable {
     uint256 internal constant ONE = 1;
     uint256 internal constant MULTIPLIER = 10 ** 18;
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
+    uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
     uint256 internal constant MAXMIUM_FEE_RATE = ONE_HUNDRED_PERCENT / 100; // 1%
     uint256 internal constant MINIMUM_REBASE_INTERVAL = 60 * 60; // 1hour
     uint256 internal constant NUMBER_OF_DEAD_SHARES = 10 ** 15;
