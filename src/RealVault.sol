@@ -63,6 +63,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     uint256 public withdrawableAmountInPast;
     uint256 public withdrawingSharesInPast;
     uint256 public withdrawingSharesInRound;
+    uint256 public withdrawAmountDust;
 
     /// @notice On every round's close, the pricePerShare value of an real token is stored
     /// This is used to determine the number of shares to be returned
@@ -84,14 +85,15 @@ contract RealVault is ReentrancyGuard, Ownable {
     event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
     event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
     event VaultMigrated(address indexed oldVault, address newVault);
-    event StragetyAdded(address indexed strategy);
-    event StragetyDestroyed(address indexed strategy);
-    event StragetyCleared(address indexed strategy);
+    event StrategyAdded(address indexed strategy);
+    event StrategyDestroyed(address indexed strategy);
+    event StrategyCleared(address indexed strategy);
     event InvestmentPortfolioUpdated(address[] indexed strategies, uint256[] indexed ratios);
     event FeeCharged(address indexed account, uint256 amount);
     event SetWithdrawFeeRate(uint256 indexed oldRate, uint256 newRate);
     event SetFeeRecipient(address indexed oldAddr, address newAddr);
     event SetRebaseInterval(uint256 indexed interval);
+    event RemoveDust(uint256 indexed dust);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.
@@ -385,7 +387,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
         manager.addStrategy(_strategy);
-        emit StragetyAdded(_strategy);
+        emit StrategyAdded(_strategy);
     }
 
     /**
@@ -397,7 +399,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
         manager.destroyStrategy(_strategy);
-        emit StragetyDestroyed(_strategy);
+        emit StrategyDestroyed(_strategy);
     }
 
     /**
@@ -409,7 +411,7 @@ contract RealVault is ReentrancyGuard, Ownable {
         IStrategyManager manager = IStrategyManager(strategyManager);
 
         manager.clearStrategy(_strategy);
-        emit StragetyCleared(_strategy);
+        emit StrategyCleared(_strategy);
     }
 
     /**
@@ -436,6 +438,14 @@ contract RealVault is ReentrancyGuard, Ownable {
         proposal = _proposal;
     }
 
+    function removeDust() external {
+        uint256 _withdrawAmountDust = withdrawAmountDust;
+        if(_withdrawAmountDust < MULTIPLIER) revert RealVault__InvalidAmount();
+        withdrawableAmountInPast -= _withdrawAmountDust;
+        withdrawAmountDust = 0;
+        emit RemoveDust(_withdrawAmountDust);
+    }
+
     // [INTERNAL FUNCTIONS]
     function _depositFor(address caller, address receiver, uint256 assets) internal returns (uint256 mintAmount) {
         if (assets == 0) revert RealVault__InvalidAmount();
@@ -444,6 +454,28 @@ contract RealVault is ReentrancyGuard, Ownable {
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
         IMinter(minter).mint(receiver, mintAmount);
         emit Deposit(caller, receiver, assets, mintAmount);
+    }
+
+    function _updateUserReceipt(
+        WithdrawReceipt memory mReceipt,
+        IMinter realEthMinter,
+        uint256 _shares,
+        uint256 _latestRoundID
+    ) private returns (WithdrawReceipt memory) {
+        uint256 withdrawAmount =
+            ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
+        
+        // Default is to round down (Solidity), track dust for withdrawAmount
+        if (withdrawAmount > 0) withdrawAmountDust++;
+
+        realEthMinter.burn(address(this), mReceipt.withdrawShares);
+        withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
+
+        mReceipt.withdrawShares = _shares;
+        mReceipt.withdrawableAmount = mReceipt.withdrawableAmount + withdrawAmount;
+
+        mReceipt.withdrawRound = _latestRoundID;
+        return mReceipt;
     }
 
     // [SETTER FUNCTIONS]
@@ -508,7 +540,7 @@ contract RealVault is ReentrancyGuard, Ownable {
             sharePrice = latestSharePrice > currSharePrice ? latestSharePrice : currSharePrice;
         }
 
-        return (assets * MULTIPLIER) / sharePrice;
+        return  ShareMath.assetToShares(assets, sharePrice);
     }
 
     /**
@@ -547,24 +579,9 @@ contract RealVault is ReentrancyGuard, Ownable {
         investedAmount = IStrategyManager(strategyManager).getAllStrategyInvestedValue();
     }
 
-    function _updateUserReceipt(
-        WithdrawReceipt memory mReceipt,
-        IMinter realEthMinter,
-        uint256 _shares,
-        uint256 _latestRoundID
-    ) private returns (WithdrawReceipt memory) {
-        uint256 withdrawAmount =
-            ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
+    
 
-        realEthMinter.burn(address(this), mReceipt.withdrawShares);
-        withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
-
-        mReceipt.withdrawShares = _shares;
-        mReceipt.withdrawableAmount = mReceipt.withdrawableAmount + withdrawAmount;
-
-        mReceipt.withdrawRound = _latestRoundID;
-        return mReceipt;
-    }
+   
 
     receive() external payable {}
 }
