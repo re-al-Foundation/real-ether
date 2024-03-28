@@ -163,11 +163,7 @@ contract VaultTest is Test {
             vm.stopPrank();
         }
 
-        uint256 sharePriceBefore = realVault.currentSharePrice();
-        realVault.addDust();
-
-        uint256 sharePriceAfter = realVault.currentSharePrice();
-        assertLt(sharePriceAfter, sharePriceBefore);
+        assertGt(realVault.withdrawAmountDust(), 0);
     }
 
     function test_fuzzRequestWithdraw(address userAddress, uint256 amount) public {

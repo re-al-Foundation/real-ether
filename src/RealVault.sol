@@ -447,13 +447,6 @@ contract RealVault is ReentrancyGuard, Ownable {
         emit SettleWithdrawDust(amount);
     }
 
-    function addDust() external {
-        uint256 _withdrawAmountDust = withdrawAmountDust;
-        withdrawableAmountInPast += _withdrawAmountDust;
-        withdrawAmountDust = 0;
-        emit SettleWithdrawDust(_withdrawAmountDust);
-    }
-
     // [INTERNAL FUNCTIONS]
     function _depositFor(address caller, address receiver, uint256 assets) internal returns (uint256 mintAmount) {
         if (assets == 0) revert RealVault__InvalidAmount();
