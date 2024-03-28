@@ -93,7 +93,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     event SetWithdrawFeeRate(uint256 indexed oldRate, uint256 newRate);
     event SetFeeRecipient(address indexed oldAddr, address newAddr);
     event SetRebaseInterval(uint256 indexed interval);
-    event RemoveDust(uint256 indexed dust);
+    event SettleWithdrawDust(uint256 indexed dust);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.
@@ -438,12 +438,13 @@ contract RealVault is ReentrancyGuard, Ownable {
         proposal = _proposal;
     }
 
-    function removeDust() external {
+    function settleWithdrawDust(uint256 amount) external {
         uint256 _withdrawAmountDust = withdrawAmountDust;
-        if(_withdrawAmountDust < MULTIPLIER) revert RealVault__InvalidAmount();
-        withdrawableAmountInPast -= _withdrawAmountDust;
-        withdrawAmountDust = 0;
-        emit RemoveDust(_withdrawAmountDust);
+        if (_withdrawAmountDust < MULTIPLIER) revert RealVault__InvalidAmount();
+        if (amount > _withdrawAmountDust) revert RealVault__ExceedBalance();
+        withdrawableAmountInPast -= amount;
+        withdrawAmountDust -= amount;
+        emit SettleWithdrawDust(amount);
     }
 
     // [INTERNAL FUNCTIONS]
@@ -462,11 +463,14 @@ contract RealVault is ReentrancyGuard, Ownable {
         uint256 _shares,
         uint256 _latestRoundID
     ) private returns (WithdrawReceipt memory) {
-        uint256 withdrawAmount =
-            ShareMath.sharesToAsset(mReceipt.withdrawShares, roundPricePerShare[mReceipt.withdrawRound]);
-        
-        // Default is to round down (Solidity), track dust for withdrawAmount
-        if (withdrawAmount > 0) withdrawAmountDust++;
+        uint256 pps = roundPricePerShare[mReceipt.withdrawRound];
+        uint256 withdrawAmount = ShareMath.sharesToAsset(mReceipt.withdrawShares, pps);
+        uint256 convertedShares = ShareMath.assetToShares(withdrawAmount, pps);
+
+        if (withdrawAmount > 0 && convertedShares < mReceipt.withdrawShares) {
+            // Default is to round down (Solidity), track dust for withdrawAmount
+            withdrawAmountDust++;
+        }
 
         realEthMinter.burn(address(this), mReceipt.withdrawShares);
         withdrawingSharesInPast = withdrawingSharesInPast - mReceipt.withdrawShares;
@@ -540,7 +544,7 @@ contract RealVault is ReentrancyGuard, Ownable {
             sharePrice = latestSharePrice > currSharePrice ? latestSharePrice : currSharePrice;
         }
 
-        return  ShareMath.assetToShares(assets, sharePrice);
+        return ShareMath.assetToShares(assets, sharePrice);
     }
 
     /**
@@ -578,10 +582,6 @@ contract RealVault is ReentrancyGuard, Ownable {
 
         investedAmount = IStrategyManager(strategyManager).getAllStrategyInvestedValue();
     }
-
-    
-
-   
 
     receive() external payable {}
 }
