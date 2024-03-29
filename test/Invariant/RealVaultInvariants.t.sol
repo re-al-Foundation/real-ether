@@ -59,12 +59,6 @@ contract RealVaultInvariants is Test {
 
         assetsVault = new AssetsVault(address(realVault), strategyManagerAddress);
 
-        // deal(deadShares.addr, 1 ether);
-        // vm.startPrank(deadShares.addr);
-
-        // realVault.deposit{value: 1 ether}();
-        // vm.stopPrank();
-
         uint256[] memory ratios = new uint256[](1);
         address[] memory strategies = new address[](1);
 
@@ -107,8 +101,12 @@ contract RealVaultInvariants is Test {
         assertEq(real.totalSupply(), totalBalance);
     }
 
-    function invariant_em() public {
+    function invariant_amountInPastIsSame() public {
         assertEq(realVault.withdrawableAmountInPast(), handler.ghost_withdrawableAmountInPast());
+    }
+
+    function invariant_sharesInPastIsSame() public {
+        assertEq(realVault.withdrawingSharesInPast(), handler.ghost_withdrawingSharesInPast());
     }
 
     function invariant_ethBalance() public {
@@ -119,7 +117,9 @@ contract RealVaultInvariants is Test {
     }
 
     function invariant_vaultBalance() public {
-        assertEq(real.balanceOf(address(realVault)), handler.ghost_TokenInRealVault() - handler.ghost_burnt());
+        assertEq(
+            real.balanceOf(address(realVault)), handler.ghost_TokenInRealVault() - handler.ghost_tokenBurntInRealVault()
+        );
     }
 
     function invariant_claims() public view {

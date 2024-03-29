@@ -10,10 +10,6 @@ import {console2 as console} from "forge-std/Test.sol";
 import {ShareMath} from "src/libraries/ShareMath.sol";
 import {AddressSet, LibAddressSet} from "./LibAddressSet.sol";
 
-interface IERC20EXTT {
-    function balanceOf(address from) external returns (uint256);
-}
-
 contract Handler is CommonBase, StdCheats, StdUtils {
     using LibAddressSet for AddressSet;
 
@@ -33,24 +29,24 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     mapping(address => Cancel) public cancel;
 
     address currentActor;
+    uint256 public currentRound = 1;
 
-    uint256 public ghost_ethSum;
-    uint256 public ghost_zeroMint;
-    uint256 public ghost_shareSum;
-    uint256 public ghost_actualMint;
-    uint256 public ghost_zeroDeposits;
     uint256 public ghost_ethInVault;
+    uint256 public ghost_nonZeroDeposits;
+    uint256 public ghost_TokenInRealVault;
     uint256 public ghost_amountInStrategy;
     uint256 public ghost_withdrawRequested;
-    uint256 public ghost_TokenInRealVault;
+    uint256 public ghost_updatePastRequest;
+    uint256 public ghost_tokenBurntInRealVault;
     uint256 public ghost_zeroWithdrawRequested;
     uint256 public ghost_cancelWithdrawRequested;
+    uint256 public ghost_withdrawingSharesInPast;
+    uint256 public ghost_instantWithdrawRequested;
     uint256 public ghost_withdrawingSharesInRound;
     uint256 public ghost_withdrawableAmountInPast;
     uint256 public ghost_zeroCancelWithdrawRequested;
-    uint256 public ghost_withdrawingSharesInPast;
-    uint256 public ghost_burnt;
-    uint256 public ghost_updateWith;
+    uint256 public ghost_zeroInstantWithdrawRequested;
+    uint256 public ghost_zeroDepositsOrContractAddress;
 
     constructor(RealVault _realVault, Real _real) {
         real = _real;
@@ -74,22 +70,20 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     }
 
     function deposit(uint256 amount) public createActor countCall("deposit") {
+        bool isContract = currentActor.code.length > 0;
         amount = bound(amount, 0, type(uint160).max);
 
-        if (currentActor != address(realVault) || currentActor != makeAccount("deadShares").addr) {
-            if (amount != 0) {
-                deal(currentActor, amount);
+        if (!isContract && amount != 0) {
+            ghost_nonZeroDeposits++;
+            deal(currentActor, amount);
 
-                vm.startPrank(currentActor);
-                uint256 shares = realVault.deposit{value: amount}();
-                vm.stopPrank();
+            vm.startPrank(currentActor);
+            realVault.deposit{value: amount}();
 
-                ghost_ethSum += amount;
-                ghost_shareSum += shares;
-                ghost_ethInVault += amount;
-            } else {
-                ghost_zeroDeposits++;
-            }
+            vm.stopPrank();
+            ghost_ethInVault += amount;
+        } else {
+            ghost_zeroDepositsOrContractAddress++;
         }
     }
 
@@ -99,7 +93,6 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         countCall("requestWithdraw")
     {
         shares = bound(shares, 0, real.balanceOf(currentActor));
-
         (uint256 withdrawRound, uint256 withdrawShares,) = realVault.userReceipts(currentActor);
 
         if (shares != 0) {
@@ -111,18 +104,19 @@ contract Handler is CommonBase, StdCheats, StdUtils {
 
             vm.stopPrank();
             if (withdrawRound != 0 && withdrawRound != currentRound) {
-                ghost_updateWith++;
-
+                ghost_updatePastRequest++;
                 ghost_withdrawingSharesInPast -= withdrawShares;
-                cancel[currentActor].round = currentRound;
 
-                ghost_burnt += withdrawShares;
+                cancel[currentActor].round = currentRound;
+                ghost_tokenBurntInRealVault += withdrawShares;
             }
+
             ghost_TokenInRealVault += shares;
             ghost_withdrawingSharesInRound += shares;
 
-            cancel[currentActor].round = currentRound;
             cancel[currentActor].upForCancelation = shares;
+
+            cancel[currentActor].round = currentRound;
             cancel[currentActor].hasRequestedWithdrawal = true;
         } else {
             ghost_zeroWithdrawRequested++;
@@ -136,12 +130,13 @@ contract Handler is CommonBase, StdCheats, StdUtils {
             if (shares != 0) {
                 ghost_cancelWithdrawRequested++;
                 vm.startPrank(currentActor);
-                realVault.cancelWithdraw(shares);
 
+                realVault.cancelWithdraw(shares);
                 vm.stopPrank();
+
                 ghost_TokenInRealVault -= shares;
                 ghost_withdrawingSharesInRound -= shares;
-                cancel[currentActor].upForCancelation = cancel[currentActor].upForCancelation - shares;
+                cancel[currentActor].upForCancelation -= shares;
 
                 if (cancel[currentActor].upForCancelation == 0) {
                     cancel[currentActor].hasRequestedWithdrawal == false;
@@ -152,8 +147,6 @@ contract Handler is CommonBase, StdCheats, StdUtils {
             ghost_zeroCancelWithdrawRequested++;
         }
     }
-
-    uint256 public currentRound = 1;
 
     function rollToNextRound() public countCall("rollToNextRound") {
         if (realVault.rebaseTime() + realVault.rebaseTimeInterval() > block.timestamp) {
@@ -176,60 +169,78 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         }
 
         realVault.rollToNextRound();
+        currentRound++;
 
         ghost_withdrawableAmountInPast +=
             ShareMath.sharesToAsset(ghost_withdrawingSharesInRound, realVault.currentSharePrice());
 
         ghost_withdrawingSharesInPast += ghost_withdrawingSharesInRound;
         ghost_withdrawingSharesInRound = 0;
-
-        currentRound++;
     }
 
-    function instantWithdraw(uint256 actorSeed, uint256 amount)
+    function instantWithdraw(uint256 actorSeed, uint256 amount, bool shares)
         public
         useActor(actorSeed)
         countCall("instantWithdraw")
     {
-        // amount = bound(amount, 0, real.balanceOf(currentActor));
-        // uint256 currSharePrice = realVault.currentSharePrice();
-        // uint256 latestSharePrice = realVault.roundPricePerShare(currentRound - 1);
+        if (shares) {
+            amount = bound(amount, 0, real.balanceOf(currentActor));
+            uint256 currSharePrice = realVault.currentSharePrice();
+            uint256 latestSharePrice = realVault.roundPricePerShare(currentRound - 1);
 
-        // uint256 sharePrice = latestSharePrice < currSharePrice ? latestSharePrice : currSharePrice;
-        // uint256 amountToWithdraw = ShareMath.sharesToAsset(amount, sharePrice);
+            uint256 sharePrice = latestSharePrice < currSharePrice ? latestSharePrice : currSharePrice;
+            uint256 amountToWithdraw = ShareMath.sharesToAsset(amount, sharePrice);
 
-        // if (amount != 0 && amountToWithdraw <= ghost_ethInVault) {
-        //     vm.startPrank(currentActor);
-        //     uint256 actualWithdrawn = realVault.instantWithdraw(0, amount);
-        //     ghost_ethInVault -= amountToWithdraw;
-        //     vm.stopPrank();
+            if (amount != 0 && amountToWithdraw <= ghost_ethInVault) {
+                ghost_instantWithdrawRequested++;
+                vm.startPrank(currentActor);
+                uint256 actualWithdrawn = realVault.instantWithdraw(0, amount);
 
-        //     console.log(actualWithdrawn, amountToWithdraw, "amountToWithdraw");
-        // }
+                vm.stopPrank();
+                uint256 idelAmount;
 
-        (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) =
-            realVault.userReceipts(currentActor);
+                if (ghost_ethInVault > ghost_withdrawableAmountInPast) {
+                    idelAmount = ghost_ethInVault - ghost_withdrawableAmountInPast;
+                }
 
-        uint256 amountToWithdraw;
-
-        if (withdrawRound != currentRound && withdrawRound != 0) {
-            amountToWithdraw = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
-
-            if (withdrawableAmount + amountToWithdraw <= ghost_ethInVault) {
-                ghost_withdrawingSharesInPast -= withdrawShares;
-                ghost_burnt += withdrawShares;
+                if (actualWithdrawn <= idelAmount) {
+                    ghost_ethInVault -= actualWithdrawn;
+                } else {
+                    uint256 am = actualWithdrawn - idelAmount;
+                    ghost_ethInVault -= idelAmount;
+                    ghost_amountInStrategy -= am;
+                }
+            } else {
+                ghost_zeroInstantWithdrawRequested++;
             }
-        }
+        } else {
+            (uint256 withdrawRound, uint256 withdrawShares, uint256 withdrawableAmount) =
+                realVault.userReceipts(currentActor);
 
-        uint256 withdrawAmount = withdrawableAmount + amountToWithdraw;
+            uint256 withdrawAmount;
+            uint256 amountToWithdraw;
 
-        if (withdrawAmount <= ghost_ethInVault && withdrawAmount != 0) {
-            vm.startPrank(currentActor);
-            realVault.instantWithdraw(withdrawAmount, 0);
+            if (withdrawRound != currentRound && withdrawRound != 0) {
+                amountToWithdraw = ShareMath.sharesToAsset(withdrawShares, realVault.roundPricePerShare(withdrawRound));
+                withdrawAmount = withdrawableAmount + amountToWithdraw;
 
-            ghost_withdrawableAmountInPast -= withdrawAmount;
-            ghost_ethInVault -= withdrawAmount;
-            vm.stopPrank();
+                if (withdrawAmount <= ghost_ethInVault) {
+                    ghost_withdrawingSharesInPast -= withdrawShares;
+                    ghost_tokenBurntInRealVault += withdrawShares;
+                }
+            }
+
+            if (withdrawAmount <= ghost_ethInVault && withdrawAmount != 0) {
+                ghost_instantWithdrawRequested++;
+                vm.startPrank(currentActor);
+                realVault.instantWithdraw(withdrawAmount, 0);
+                vm.stopPrank();
+
+                ghost_withdrawableAmountInPast -= withdrawAmount;
+                ghost_ethInVault -= withdrawAmount;
+            } else {
+                ghost_zeroInstantWithdrawRequested++;
+            }
         }
     }
 
@@ -256,35 +267,25 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         console.log("-------------------");
         console.log("Deposit(s)", calls["deposit"]);
         console.log("Cancel Withdraw(s)", calls["cancelWithdraw"]);
+        console.log("Roll To Next Round", calls["rollToNextRound"]);
         console.log("Request Withdraw(s)", calls["requestWithdraw"]);
-
-        console.log("Mint(s):", ghost_zeroWithdrawRequested, ghost_withdrawRequested);
-        console.log("ghost_updateWith(s):", ghost_updateWith);
-        console.log("Cancel(s):", ghost_zeroCancelWithdrawRequested, ghost_cancelWithdrawRequested);
+        console.log("Instant Withdraw(s)", calls["instantWithdraw"]);
+        console.log("-------------------");
+        console.log("Zero Calls:");
+        console.log("-------------------");
+        console.log("Zero Deposits / Is ContractAddress(s):", ghost_zeroDepositsOrContractAddress);
+        console.log("Zero Cancel(s):", ghost_zeroCancelWithdrawRequested);
+        console.log("Zero Request((s):", ghost_zeroWithdrawRequested);
+        console.log("Zero Instant((s):", ghost_zeroInstantWithdrawRequested);
+        console.log("-------------------");
+        console.log("Actual Calls:");
+        console.log("-------------------");
+        console.log("Deposit(s):", ghost_nonZeroDeposits);
+        console.log("Cancel Withdraw((s):", ghost_cancelWithdrawRequested);
+        console.log("Request Withdraw((s):", ghost_withdrawRequested);
+        console.log("Instant Withdraw(s):", ghost_instantWithdrawRequested);
+        console.log("ghost_updatePastRequest(s):", ghost_updatePastRequest);
     }
 
-    // function callSummary() external view {
-    //     console.log("-------------------");
-    //     console.log("  ");
-    //     console.log("Call summary:");
-    //     console.log("  ");
-    //     console.log("-------------------");
-    //     console.log("Call Count:");
-    //     console.log("-------------------");
-    //     console.log("Deposit(s)", calls["deposit"]);
-    //     console.log("Claim(s)", calls["claim"]);
-    //     console.log("Set Reward(s)", calls["set reward"]);
-    //     console.log("-------------------");
-    //     console.log("Zero Calls:");
-    //     console.log("-------------------");
-    //     console.log("Mint(s):", ghost_zeroMint);
-    //     console.log("-------------------");
-    //     console.log("-------------------");
-    //     console.log("Actual Calls:");
-    //     console.log("-------------------");
-    //     console.log("Mint(s):", ghost_actualMint);
-    // }
-
-    function __mint(address addr, uint256 amount) internal {}
     receive() external payable {}
 }

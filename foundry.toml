@@ -22,5 +22,8 @@ sepolia = {key = "${ETHERSCAN_KEY}", url = "https://api-sepolia.etherscan.io/api
 unreal = {key = "${ETHERSCAN_KEY}", url = "https://unreal.blockscout.com/api"}
 mumbai = {key = "${POLYGONSCAN_KEY}", url = "https://api-testnet.polygonscan.com/api"}
 
+[invariant]
+runs = 1000
+
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
