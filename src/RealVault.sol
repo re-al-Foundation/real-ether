@@ -15,11 +15,13 @@ import {ShareMath} from "./libraries/ShareMath.sol";
 error RealVault__NotReady();
 error RealVault__InvalidAmount();
 error RealVault__ZeroAddress();
+error RealVault__MininmumWithdraw();
 error RealVault__WithdrawInstantly();
 error RealVault__NoRequestFound();
 error RealVault__NotProposal();
 error RealVault__ExceedBalance();
 error RealVault__WaitInQueue();
+error RealVault__MinimumWithdrawableShares();
 error RealVault__ExceedRequestedAmount(uint256 requestedAmount, uint256 actualAmount);
 error RealVault__ExceedWithdrawAmount();
 error RealVault__ExceedMaxFeeRate(uint256 _feeRate);
@@ -46,6 +48,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     uint256 internal constant MINIMUM_REBASE_INTERVAL = 60 * 60; // 1hour
     uint256 internal constant NUMBER_OF_DEAD_SHARES = 10 ** 15;
 
+    uint256 public minWithdrawableShares = 1_00;
     uint256 public rebaseTimeInterval = 24 * 60 * 60; // 1 day
     uint256 public rebaseTime;
 
@@ -94,6 +97,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     event SetFeeRecipient(address indexed oldAddr, address newAddr);
     event SetRebaseInterval(uint256 indexed interval);
     event SettleWithdrawDust(uint256 indexed dust);
+    event MinWithdrawableSharesUpdated(uint256 indexed minShares);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.
@@ -159,6 +163,7 @@ contract RealVault is ReentrancyGuard, Ownable {
      */
     function requestWithdraw(uint256 _shares) external nonReentrant {
         if (_shares == 0) revert RealVault__InvalidAmount();
+        if (_shares < minWithdrawableShares) revert RealVault__MininmumWithdraw();
 
         uint256 _latestRoundID = latestRoundID;
 
@@ -204,6 +209,11 @@ contract RealVault is ReentrancyGuard, Ownable {
 
         unchecked {
             mReceipt.withdrawShares -= _shares;
+        }
+
+        // check minimum shares request
+        if (mReceipt.withdrawShares != 0 && mReceipt.withdrawShares < minWithdrawableShares) {
+            revert RealVault__MininmumWithdraw();
         }
 
         TransferHelper.safeTransfer(real, msg.sender, _shares);
@@ -522,6 +532,18 @@ contract RealVault is ReentrancyGuard, Ownable {
         if (_interval > MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
         rebaseTimeInterval = _interval;
         emit SetRebaseInterval(rebaseTimeInterval);
+    }
+
+    /**
+     * @dev Sets the minimum withdrawable shares.
+     * @param _minWithdrawableShares The new minimum withdrawable shares.
+     * Requirements:
+     * - The new minimum must not be less than the 100 wei.
+     */
+    function setMinWithdrawableShares(uint256 _minWithdrawableShares) external onlyOwner {
+        if (_minWithdrawableShares < 1_00) revert RealVault__MinimumWithdrawableShares();
+        minWithdrawableShares = _minWithdrawableShares;
+        emit MinWithdrawableSharesUpdated(_minWithdrawableShares);
     }
 
     // [VIEW FUNCTIONS]
