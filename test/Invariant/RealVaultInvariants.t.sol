@@ -18,7 +18,7 @@ import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
  *         in the handler contract to different scenarios from different actors.
  *
  * Functions Exposed:
- * - Deposit()
+ * - deposit()
  * - rollToNextRound()
  * - cancelWithdrawal()
  * - instantWithdrawal()

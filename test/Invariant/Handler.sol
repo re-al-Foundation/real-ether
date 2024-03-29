@@ -273,16 +273,16 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         console.log("-------------------");
         console.log("Zero Calls:");
         console.log("-------------------");
-        console.log("Zero Deposits / Is ContractAddress(s):", ghost_zeroDepositsOrContractAddress);
-        console.log("Zero Cancel(s):", ghost_zeroCancelWithdrawRequested);
         console.log("Zero Request((s):", ghost_zeroWithdrawRequested);
+        console.log("Zero Cancel(s):", ghost_zeroCancelWithdrawRequested);
         console.log("Zero Instant((s):", ghost_zeroInstantWithdrawRequested);
+        console.log("Zero Deposits / Is ContractAddress(s):", ghost_zeroDepositsOrContractAddress);
         console.log("-------------------");
         console.log("Actual Calls:");
         console.log("-------------------");
         console.log("Deposit(s):", ghost_nonZeroDeposits);
-        console.log("Cancel Withdraw((s):", ghost_cancelWithdrawRequested);
         console.log("Request Withdraw((s):", ghost_withdrawRequested);
+        console.log("Cancel Withdraw((s):", ghost_cancelWithdrawRequested);
         console.log("Instant Withdraw(s):", ghost_instantWithdrawRequested);
         console.log("ghost_updatePastRequest(s):", ghost_updatePastRequest);
     }
