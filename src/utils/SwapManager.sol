@@ -38,7 +38,7 @@ contract SwapManager is Ownable {
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
     uint32 public constant MIN_TWAP_DURATION = 3_600;
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
+    uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
 

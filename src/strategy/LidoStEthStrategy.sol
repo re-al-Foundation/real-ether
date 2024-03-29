@@ -139,9 +139,16 @@ contract LidoStEthStrategy is Strategy {
 
         for (uint256 i = 0; i < len;) {
             IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
-            if (status.isClaimed) continue;
+            if (status.isClaimed) {
+                unchecked {
+                    i++;
+                }
+                continue;
+            }
             if (status.isFinalized) {
-                ids[index++] = requestIds[i];
+                unchecked {
+                    ids[index++] = requestIds[i];
+                }
                 totalClaimable += status.amountOfStETH;
             } else {
                 totalPending += status.amountOfStETH;
