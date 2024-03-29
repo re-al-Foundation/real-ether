@@ -11,6 +11,20 @@ import {Test, console2 as console} from "forge-std/Test.sol";
 import {TestEthStrategy} from "src/mock/TestEthStrategy.sol";
 import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 
+/**
+ * @title Real Vault Invariants
+ * @author c-n-o-t-e
+ * @dev Contract is used to test out Real Vault Contract by simulating exposed functions
+ *         in the handler contract to different scenarios from different actors.
+ *
+ * Functions Exposed:
+ * - Deposit()
+ * - rollToNextRound()
+ * - cancelWithdrawal()
+ * - instantWithdrawal()
+ * - requestWithdrawal()
+ */
+
 contract RealVaultInvariants is Test {
     Real public real;
     Minter public minter;
@@ -25,20 +39,12 @@ contract RealVaultInvariants is Test {
     address assetVaultAddress;
     address strategyManagerAddress;
 
-    Account public user;
-    Account public user2;
     Account public owner;
     Account public proposal;
-    Account public deployer;
-    Account public deadShares;
 
     function setUp() public {
-        user = makeAccount("user");
-        user2 = makeAccount("user2");
         owner = makeAccount("owner");
         proposal = makeAccount("proposal");
-        deployer = makeAccount("deployer");
-        deadShares = makeAccount("deadShares");
 
         minterAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         realVaultAddress = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
@@ -122,7 +128,7 @@ contract RealVaultInvariants is Test {
         );
     }
 
-    function invariant_claims() public view {
+    function invariant_callSummary() public view {
         handler.callSummary();
     }
 
