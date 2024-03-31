@@ -123,6 +123,51 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
+    mapping(uint256 => uint256) public bal;
+
+    function test_dust() public {
+        uint256 amount = 1 ether;
+        deal(address(s1), 0.1 ether);
+        deal(address(7), amount);
+
+        vm.startPrank(address(7));
+        uint256 shares = realVault.deposit{value: amount}();
+
+        bal[0] = shares;
+        vm.stopPrank();
+
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+        deal(address(2), 20 ether);
+
+        for (uint256 i = 1; i < 20; i++) {
+            vm.startPrank(address(2));
+            shares = realVault.deposit{value: amount}();
+
+            bal[i] = shares;
+            vm.stopPrank();
+        }
+
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        for (uint256 i = 1; i < 20; i++) {
+            vm.startPrank(address(2));
+            amount = bal[i];
+
+            real.approve(address(realVault), amount);
+            realVault.requestWithdraw(amount);
+
+            vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+            realVault.rollToNextRound();
+
+            realVault.instantWithdraw(amount, 0);
+            vm.stopPrank();
+        }
+
+        assertGt(realVault.withdrawAmountDust(), 0);
+    }
+
     function test_fuzzRequestWithdraw(address userAddress, uint256 amount) public {
         amount = bound(amount, MIN_SHARES, type(uint160).max);
         if (amount != 0 && userAddress != address(0)) {

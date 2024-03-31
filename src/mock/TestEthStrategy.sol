@@ -25,6 +25,13 @@ contract TestEthStrategy is Strategy {
         TransferHelper.safeTransferETH(manager, _ethAmount);
     }
 
+    function instantWithdraw(uint256 _amount) external override onlyManager returns (uint256 actualAmount) {
+        if (_amount == 0) revert Strategy__ZeroAmount();
+        if (_amount > getTotalValue()) revert Strategy__InsufficientBalance();
+        actualAmount = _amount;
+        TransferHelper.safeTransferETH(manager, _amount);
+    }
+
     function clear() external override onlyManager returns (uint256 amount) {
         amount = getTotalValue();
         TransferHelper.safeTransferETH(manager, amount);
