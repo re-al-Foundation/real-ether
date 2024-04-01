@@ -38,7 +38,7 @@ contract SwapManager is Ownable {
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
     uint32 public constant MIN_TWAP_DURATION = 3_600;
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000;
+    uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
     uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
 
@@ -196,18 +196,20 @@ contract SwapManager is Ownable {
         pure
         returns (uint256 quoteAmount)
     {
-        uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
-        // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
-        if (sqrtRatioX96 <= type(uint128).max) {
-            uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, baseAmount, ONE << 192)
-                : FullMath.mulDiv(ONE << 192, baseAmount, ratioX192);
-        } else {
-            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, ONE << 64);
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, baseAmount, ONE << 128)
-                : FullMath.mulDiv(ONE << 128, baseAmount, ratioX128);
+        unchecked {
+            uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
+            // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
+            if (sqrtRatioX96 <= type(uint128).max) {
+                uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
+                quoteAmount = baseToken < quoteToken
+                    ? FullMath.mulDiv(ratioX192, baseAmount, ONE << 192)
+                    : FullMath.mulDiv(ONE << 192, baseAmount, ratioX192);
+            } else {
+                uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, ONE << 64);
+                quoteAmount = baseToken < quoteToken
+                    ? FullMath.mulDiv(ratioX128, baseAmount, ONE << 128)
+                    : FullMath.mulDiv(ONE << 128, baseAmount, ratioX128);
+            }
         }
     }
 

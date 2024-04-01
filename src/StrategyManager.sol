@@ -41,9 +41,9 @@ contract StrategyManager {
 
     uint256 internal cumulativeRatio;
     uint256 internal constant ONE = 1;
-    uint256 internal constant DUST = 100_00;
-    uint256 internal constant MINIMUM_ALLOCATION = 100_00; // 1%
-    uint256 internal constant ONE_HUNDRED_PERCENT = 1_000_000; // 100%
+    uint256 internal constant DUST = 10_000;
+    uint256 internal constant MINIMUM_ALLOCATION = 1_0000; // 1%
+    uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000; // 100%
 
     address public realVault;
     address payable public immutable assetsVault;
@@ -52,7 +52,7 @@ contract StrategyManager {
 
     mapping(address => uint256) public ratios;
 
-    event VaultUpdated(address oldRealVault, address newRealVault);
+    event VaultUpdated(address indexed oldRealVault, address newRealVault);
 
     /**
      * @param _realVault Address of the RealVault contract.
@@ -167,9 +167,11 @@ contract StrategyManager {
 
             actualAmount = balanceBeforeRepay;
         } else {
+            uint256 amount_;
             unchecked {
-                actualAmount = _forceWithdraw(_amount - balanceBeforeRepay) + balanceBeforeRepay;
+                amount_ = _amount - balanceBeforeRepay;
             }
+            actualAmount = _forceWithdraw(amount_) + balanceBeforeRepay;
         }
     }
 
@@ -212,7 +214,7 @@ contract StrategyManager {
             IAssetsVault(assetsVault).withdraw(address(this), _in);
         }
 
-        (uint256 total, uint256[] memory strategiesValue) = getAllStrategyInvestedValue();
+        (uint256 total, uint256[] memory strategiesValue) = getTotalInvestedValue();
         if (total < _out) {
             total = 0;
         } else {
@@ -467,7 +469,7 @@ contract StrategyManager {
      * @notice Gets the total invested asset value of all strategies.
      * @return _value The total valid value of all strategies.
      */
-    function getAllStrategyInvestedValue() public view returns (uint256 _value, uint256[] memory strategiesValue) {
+    function getTotalInvestedValue() public view returns (uint256 _value, uint256[] memory strategiesValue) {
         uint256 length = strategies.length();
         strategiesValue = new uint256[](length);
 

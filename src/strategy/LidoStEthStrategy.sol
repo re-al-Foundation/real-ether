@@ -139,9 +139,16 @@ contract LidoStEthStrategy is Strategy {
 
         for (uint256 i = 0; i < len;) {
             IWithdrawalQueueERC721.WithdrawalRequestStatus memory status = statuses[i];
-            if (status.isClaimed) continue;
+            if (status.isClaimed) {
+                unchecked {
+                    i++;
+                }
+                continue;
+            }
             if (status.isFinalized) {
-                ids[index++] = requestIds[i];
+                unchecked {
+                    ids[index++] = requestIds[i];
+                }
                 totalClaimable += status.amountOfStETH;
             } else {
                 totalPending += status.amountOfStETH;
@@ -175,16 +182,16 @@ contract LidoStEthStrategy is Strategy {
      */
     function withdraw(uint256 _ethAmount) external override onlyManager returns (uint256 actualAmount) {
         if (_ethAmount == 0) revert Strategy__ZeroAmount();
-        // default to the MIN_STETH_WITHDRAWAL_AMOUNT if the requested withdrawal amount is less than the minimum.
-        if (_ethAmount < MIN_STETH_WITHDRAWAL_AMOUNT) _ethAmount = MIN_STETH_WITHDRAWAL_AMOUNT;
-
         if (STETH.balanceOf(address(this)) < _ethAmount) revert Strategy__InsufficientBalance();
+
+        // Withdrawing as little as 100 wei from the underlying strategy is not economically viable.
+        if (_ethAmount < MIN_STETH_WITHDRAWAL_AMOUNT) return 0;
 
         //approve steth for WithdrawalQueueERC721
         TransferHelper.safeApprove(address(STETH), address(stETHWithdrawalQueue), _ethAmount);
 
         uint256 remainingBalance = _ethAmount;
-        uint256 batchLen = (_ethAmount / MAX_STETH_WITHDRAWAL_AMOUNT) + 1;
+        uint256 batchLen = ((_ethAmount - 1) / MAX_STETH_WITHDRAWAL_AMOUNT) + 1;
         uint256[] memory requestedAmounts = new uint256[](batchLen);
         uint256 index;
 

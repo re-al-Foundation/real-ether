@@ -17,7 +17,7 @@ abstract contract Strategy {
         _;
     }
 
-    event TransferGovernance(address oldOwner, address newOwner);
+    event TransferGovernance(address indexed oldOwner, address newOwner);
 
     constructor(address payable _manager, string memory _name) {
         if (_manager == address(0)) revert Strategy__NotManager();

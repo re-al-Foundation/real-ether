@@ -14,8 +14,10 @@ import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 
 contract VaultTest is Test {
     error RealVault__WithdrawInstantly();
+    error RealVault__MininmumWithdraw();
 
     uint256 PRECISION = 10 ** 18;
+    uint256 MIN_SHARES = 1_00;
 
     Real public real;
     Minter public minter;
@@ -121,8 +123,53 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
+    mapping(uint256 => uint256) public bal;
+
+    function test_dust() public {
+        uint256 amount = 1 ether;
+        deal(address(s1), 0.1 ether);
+        deal(address(7), amount);
+
+        vm.startPrank(address(7));
+        uint256 shares = realVault.deposit{value: amount}();
+
+        bal[0] = shares;
+        vm.stopPrank();
+
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+        deal(address(2), 20 ether);
+
+        for (uint256 i = 1; i < 20; i++) {
+            vm.startPrank(address(2));
+            shares = realVault.deposit{value: amount}();
+
+            bal[i] = shares;
+            vm.stopPrank();
+        }
+
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        for (uint256 i = 1; i < 20; i++) {
+            vm.startPrank(address(2));
+            amount = bal[i];
+
+            real.approve(address(realVault), amount);
+            realVault.requestWithdraw(amount);
+
+            vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+            realVault.rollToNextRound();
+
+            realVault.instantWithdraw(amount, 0);
+            vm.stopPrank();
+        }
+
+        assertGt(realVault.withdrawAmountDust(), 0);
+    }
+
     function test_fuzzRequestWithdraw(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount);
             vm.startPrank(userAddress);
@@ -162,7 +209,7 @@ contract VaultTest is Test {
     }
 
     function test_fuzzRequesMultiplytWithdrawsInSameRound(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
 
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount * 2);
@@ -203,7 +250,7 @@ contract VaultTest is Test {
     }
 
     function test_fuzzRequesMultiplytWithdrawsInDifferentRounds(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
 
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount * 2);
@@ -251,7 +298,7 @@ contract VaultTest is Test {
     }
 
     function test_fuzzCancelWithdraw(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
 
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount);
@@ -293,7 +340,7 @@ contract VaultTest is Test {
     }
 
     function test_fuzzCancelPartOfRequestedWithdraw(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
 
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount * 2);
@@ -327,7 +374,7 @@ contract VaultTest is Test {
     }
 
     function test_fuzzInstantWithdrawEthInPastRound(address userAddress, uint256 amount) public {
-        amount = bound(amount, 0, type(uint160).max);
+        amount = bound(amount, MIN_SHARES, type(uint160).max);
 
         if (amount != 0 && userAddress != address(0)) {
             deal(userAddress, amount);
@@ -649,5 +696,41 @@ contract VaultTest is Test {
         vm.stopPrank();
 
         assertEq(address(assetsVault).balance, 0.6 ether);
+    }
+
+    function test_CancelWithdrawMinShares() public {
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+        // deposit in Round#0 by user1 at 1 pps
+        realVault.deposit{value: 1 ether}();
+
+        // min shares 100 wei
+        vm.expectRevert(abi.encodeWithSelector(RealVault__MininmumWithdraw.selector));
+        realVault.requestWithdraw(10);
+        vm.stopPrank();
+
+        // increment the time to the next round
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        // roll epoch to Round#2
+        realVault.rollToNextRound();
+
+        vm.startPrank(user.addr);
+        real.approve(address(realVault), 10_000);
+        realVault.requestWithdraw(10_000);
+        
+        // reETH balance in the realvault should be 10_000 wei after withdraw request
+        assertEq(real.balanceOf(address(realVault)), 10_000);
+        
+        // A minimum of 100 wei shares must remain after a withdrawal.
+        vm.expectRevert(abi.encodeWithSelector(RealVault__MininmumWithdraw.selector));
+        realVault.cancelWithdraw(99_50);
+
+        // reETH balance in the realvault should be 1_00 wei after canceling the 99_00 wei
+        realVault.cancelWithdraw(99_00);
+        assertEq(real.balanceOf(address(realVault)), 100);
+
+        realVault.cancelWithdraw(1_00);
+        assertEq(real.balanceOf(address(realVault)), 0);
+        vm.stopPrank();
     }
 }
