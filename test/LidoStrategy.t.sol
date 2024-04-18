@@ -34,6 +34,12 @@ import {IWithdrawalQueueERC721} from "src/interfaces/IWithdrawalQueueERC721.sol"
  * - Force Withdraw By Real Vault.
  */
 contract LidoStrategyTest is Test {
+    error Strategy__ZeroAddress();
+    error Strategy__ZeroAmount();
+    error Strategy__LidoDeposit();
+    error Strategy__InsufficientBalance();
+    error Strategy__ZeroPoolLiquidity();
+
     uint256 PRECISION = 10 ** 18;
 
     Real public real;
@@ -669,6 +675,53 @@ contract LidoStrategyTest is Test {
         (,, uint256 totalPending) = lidoStEthStrategy.checkPendingAssets();
         assertEq(totalPending, 0); // MIN_STETH_WITHDRAWAL_AMOUNT
 
+        vm.stopPrank();
+    }
+
+    function test_SetGovernance() external {
+        vm.expectRevert(abi.encodeWithSelector(Strategy__ZeroAddress.selector));
+        lidoStEthStrategy.setGovernance(address(0));
+
+        lidoStEthStrategy.setGovernance(user.addr);
+        assertEq(lidoStEthStrategy.governance(), user.addr);
+    }
+
+    function test_depositFail() public {
+        vm.startPrank(strategyManagerAddress);
+        deal(strategyManagerAddress, 1 ether);
+        vm.expectRevert(Strategy__LidoDeposit.selector);
+        lidoStEthStrategy.deposit{value: 1}();
+
+        vm.expectRevert(Strategy__ZeroAmount.selector);
+        lidoStEthStrategy.deposit{value: 0}();
+        vm.stopPrank();
+    }
+
+    function test_withdrawFail() public {
+        vm.startPrank(strategyManagerAddress);
+        deal(strategyManagerAddress, 1 ether);
+        vm.expectRevert(Strategy__ZeroAmount.selector);
+        lidoStEthStrategy.withdraw(0);
+
+        vm.expectRevert(Strategy__InsufficientBalance.selector);
+        lidoStEthStrategy.withdraw(1 ether);
+
+        // return zero
+        lidoStEthStrategy.instantWithdraw(0);
+
+        vm.expectRevert(Strategy__ZeroPoolLiquidity.selector);
+        lidoStEthStrategy.instantWithdraw(1);
+
+        lidoStEthStrategy.clear();
+
+        uint256[] memory ids;
+        (ids,,) = lidoStEthStrategy.checkPendingAssets(ids);
+        assertEq(ids.length, 0);
+
+        uint256[] memory ids2 = new uint256[](1);
+        ids2[0] = 123456;
+        vm.expectRevert();
+        lidoStEthStrategy.checkPendingAssets(ids2);
         vm.stopPrank();
     }
 }

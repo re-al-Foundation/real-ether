@@ -287,5 +287,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         console.log("ghost_updatePastRequest(s):", ghost_updatePastRequest);
     }
 
+    function test() public {}
+
     receive() external payable {}
 }

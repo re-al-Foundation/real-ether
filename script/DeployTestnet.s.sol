@@ -100,4 +100,6 @@ contract DeployTestnetScript is Script {
             if iszero(iszero(cs)) { isDeployed := true }
         }
     }
+
+    function test() public {}
 }

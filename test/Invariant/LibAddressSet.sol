@@ -37,4 +37,6 @@ library LibAddressSet {
             func(s.addrs[i]);
         }
     }
+
+    function test() public {}
 }

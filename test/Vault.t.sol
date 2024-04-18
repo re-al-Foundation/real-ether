@@ -717,10 +717,10 @@ contract VaultTest is Test {
         vm.startPrank(user.addr);
         real.approve(address(realVault), 10_000);
         realVault.requestWithdraw(10_000);
-        
+
         // reETH balance in the realvault should be 10_000 wei after withdraw request
         assertEq(real.balanceOf(address(realVault)), 10_000);
-        
+
         // A minimum of 100 wei shares must remain after a withdrawal.
         vm.expectRevert(abi.encodeWithSelector(RealVault__MininmumWithdraw.selector));
         realVault.cancelWithdraw(99_50);
@@ -732,5 +732,13 @@ contract VaultTest is Test {
         realVault.cancelWithdraw(1_00);
         assertEq(real.balanceOf(address(realVault)), 0);
         vm.stopPrank();
+    }
+
+    function test_ShareMathAssets() public {
+        vm.expectRevert("ShareMath Lib: Invalid assetPerShare");
+        ShareMath.sharesToAsset(1 ether, 0);
+
+        uint256 assets = ShareMath.sharesToAsset(1 ether, 1 ether);
+        assertEq(assets, 1 ether);
     }
 }

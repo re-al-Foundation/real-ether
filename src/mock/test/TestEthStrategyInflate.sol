@@ -66,5 +66,7 @@ contract TestEthStrategyInflate is Strategy {
 
     function checkPendingStatus() external override returns (uint256 pending, uint256 executable) {}
 
+    function test() public {}
+
     receive() external payable {}
 }

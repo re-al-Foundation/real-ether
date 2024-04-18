@@ -24,7 +24,6 @@ import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
  * - instantWithdrawal()
  * - requestWithdrawal()
  */
-
 contract RealVaultInvariants is Test {
     Real public real;
     Minter public minter;
@@ -131,6 +130,8 @@ contract RealVaultInvariants is Test {
     function invariant_callSummary() public view {
         handler.callSummary();
     }
+
+    function test() public {}
 
     receive() external payable {}
 }
