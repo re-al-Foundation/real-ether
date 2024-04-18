@@ -68,27 +68,27 @@ contract SwapManager is Ownable {
         twapDuration = MIN_TWAP_DURATION;
     }
 
-    /**
-     * @notice Swaps tokens using Uniswap V3 or Curve pool.
-     * @param tokenIn The input token address.
-     * @param amountIn The amount of input tokens.
-     * @return amountOut The amount of output tokens.
-     */
-    function swap(address tokenIn, uint256 amountIn) external returns (uint256 amountOut) {
-        DEX dexType;
-        uint256 quoteAmount;
-        (dexType, quoteAmount) = getFairQuote(amountIn, tokenIn);
+    // /**
+    //  * @notice Swaps tokens using Uniswap V3 or Curve pool.
+    //  * @param tokenIn The input token address.
+    //  * @param amountIn The amount of input tokens.
+    //  * @return amountOut The amount of output tokens.
+    //  */
+    // function swap(address tokenIn, uint256 amountIn) external returns (uint256 amountOut) {
+    //     DEX dexType;
+    //     uint256 quoteAmount;
+    //     (dexType, quoteAmount) = getFairQuote(amountIn, tokenIn);
 
-        if (dexType == DEX.Uniswap) {
-            amountOut = swapUinv3(tokenIn, amountIn);
-        } else {
-            amountOut = swapCurve(tokenIn, amountIn);
-        }
+    //     if (dexType == DEX.Uniswap) {
+    //         amountOut = swapUinv3(tokenIn, amountIn);
+    //     } else {
+    //         amountOut = swapCurve(tokenIn, amountIn);
+    //     }
 
-        // check recieved amount out using fairQuoteMin
-        uint256 quoteAmountMin = getMinimumAmount(WETH9, quoteAmount);
-        if (amountOut < quoteAmountMin) revert SwapManager__TooLittleRecieved(amountOut, quoteAmountMin);
-    }
+    //     // check recieved amount out using fairQuoteMin
+    //     uint256 quoteAmountMin = getMinimumAmount(WETH9, quoteAmount);
+    //     if (amountOut < quoteAmountMin) revert SwapManager__TooLittleRecieved(amountOut, quoteAmountMin);
+    // }
 
     /**
      * @notice Swap tokens from the uniswap v3 pools.
@@ -215,21 +215,21 @@ contract SwapManager is Ownable {
 
     // [view functions]
 
-    /**
-     * @notice Gets the fair quote for swapping tokens.
-     * @param amountIn The amount of input tokens.
-     * @param tokenIn The input token address.
-     * @return dexType The DEX (Decentralized Exchange) type (Uniswap or Curve).
-     * @return amountOut The estimated output amount of tokens.
-     */
-    function getFairQuote(uint256 amountIn, address tokenIn) public view returns (DEX dexType, uint256 amountOut) {
-        // estimate price using the twap
-        uint128 amountInUint128 = amountIn.toUint128();
-        uint256 v3Out = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
-        uint256 curveOut = estimateCurveAmountOut(amountInUint128, tokenIn);
-        if (v3Out == 0 && curveOut == 0) revert SwapManager__NoLiquidity();
-        return v3Out > curveOut ? (DEX.Uniswap, v3Out) : (DEX.Curve, curveOut);
-    }
+    // /**
+    //  * @notice Gets the fair quote for swapping tokens.
+    //  * @param amountIn The amount of input tokens.
+    //  * @param tokenIn The input token address.
+    //  * @return dexType The DEX (Decentralized Exchange) type (Uniswap or Curve).
+    //  * @return amountOut The estimated output amount of tokens.
+    //  */
+    // function getFairQuote(uint256 amountIn, address tokenIn) public view returns (DEX dexType, uint256 amountOut) {
+    //     // estimate price using the twap
+    //     uint128 amountInUint128 = amountIn.toUint128();
+    //     uint256 v3Out = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
+    //     uint256 curveOut = estimateCurveAmountOut(amountInUint128, tokenIn);
+    //     if (v3Out == 0 && curveOut == 0) revert SwapManager__NoLiquidity();
+    //     return v3Out > curveOut ? (DEX.Uniswap, v3Out) : (DEX.Curve, curveOut);
+    // }
 
     /**
      * @dev Fetches virtual price of the curve pool and
