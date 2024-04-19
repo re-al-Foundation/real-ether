@@ -631,7 +631,7 @@ contract LidoStrategyTest is Test {
         vm.warp(block.timestamp + 1 days);
         realVault.rollToNextRound();
 
-        assertEq(lidoStEthStrategy.getRequestIdsLen(),2);
+        assertEq(lidoStEthStrategy.getRequestIdsLen(), 2);
         assertEq(lidoStEthStrategy.getRequestIds()[0], 28235);
 
         uint256[] memory rIds = new uint256[](2);
@@ -668,16 +668,16 @@ contract LidoStrategyTest is Test {
         lidoStEthStrategy.claimAllPendingAssetsByIds(_requestsIds, _hintIds);
         assertEq(address(assetsVault).balance, 1000 ether);
 
-        // check 
+        // check
         lidoStEthStrategy.checkPendingStatus();
         lidoStEthStrategy.checkPendingAssets(rIds);
         lidoStEthStrategy.getStETHWithdrawalStatus();
         lidoStEthStrategy.getStETHWithdrawalStatusForIds(rIds);
 
         // check the invested values
-        assertEq(lidoStEthStrategy.getTotalValue(),1001 ether);
-        assertEq(lidoStEthStrategy.getClaimableAndPendingValue(),600.8 ether);
-        assertEq(lidoStEthStrategy.getClaimableValue(),600.8 ether);
+        assertEq(lidoStEthStrategy.getTotalValue(), 1001 ether);
+        assertEq(lidoStEthStrategy.getClaimableAndPendingValue(), 600.8 ether);
+        assertEq(lidoStEthStrategy.getClaimableValue(), 600.8 ether);
 
         //donate eth
         deal(address(lidoStEthStrategy), 0.1 ether);

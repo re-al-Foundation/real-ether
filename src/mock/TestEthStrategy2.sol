@@ -67,5 +67,7 @@ contract TestEthStrategy2 is Strategy {
 
     function claimAllPendingAssets() external virtual override {}
 
+    function test() public {}
+
     receive() external payable {}
 }
