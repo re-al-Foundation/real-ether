@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
 
-import {FullMath} from "./FullMath.sol";
+import {FullMath} from "v3-core-0.8/libraries/FullMath.sol";
 
 library ShareMath {
     uint256 internal constant DECIMAL = 18;
