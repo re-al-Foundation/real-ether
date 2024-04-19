@@ -3,3 +3,4 @@ forge-std/=lib/forge-std/src/
 oz/=lib/openzeppelin-contracts/contracts/
 v3-periphery/=lib/v3-periphery/contracts/
 @uniswap/v3-core/=lib/v3-core/
+v3-core-0.8/=lib/v3-core-0.8/contracts/

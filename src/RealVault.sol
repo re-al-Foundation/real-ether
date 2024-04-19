@@ -12,21 +12,6 @@ import {IAssetsVault} from "./interfaces/IAssetsVault.sol";
 import {IStrategyManager} from "./interfaces/IStrategyManager.sol";
 import {ShareMath} from "./libraries/ShareMath.sol";
 
-error RealVault__NotReady();
-error RealVault__InvalidAmount();
-error RealVault__ZeroAddress();
-error RealVault__MininmumWithdraw();
-error RealVault__WithdrawInstantly();
-error RealVault__NoRequestFound();
-error RealVault__NotProposal();
-error RealVault__ExceedBalance();
-error RealVault__WaitInQueue();
-error RealVault__MinimumWithdrawableShares();
-error RealVault__ExceedRequestedAmount(uint256 requestedAmount, uint256 actualAmount);
-error RealVault__ExceedWithdrawAmount();
-error RealVault__ExceedMaxFeeRate(uint256 _feeRate);
-error RealVault__MinimumRebaseInterval(uint256 minInterval);
-
 /**
  * @title Real Ether Vault (reETH)
  * @author Mavvverick
@@ -98,6 +83,21 @@ contract RealVault is ReentrancyGuard, Ownable {
     event SetRebaseInterval(uint256 indexed interval);
     event SettleWithdrawDust(uint256 indexed dust);
     event MinWithdrawableSharesUpdated(uint256 indexed minShares);
+
+    error RealVault__NotReady();
+    error RealVault__InvalidAmount();
+    error RealVault__ZeroAddress();
+    error RealVault__MininmumWithdraw();
+    error RealVault__WithdrawInstantly();
+    error RealVault__NoRequestFound();
+    error RealVault__NotProposal();
+    error RealVault__ExceedBalance();
+    error RealVault__WaitInQueue();
+    error RealVault__MinimumWithdrawableShares();
+    error RealVault__ExceedRequestedAmount(uint256 requestedAmount, uint256 actualAmount);
+    error RealVault__ExceedWithdrawAmount();
+    error RealVault__ExceedMaxFeeRate(uint256 _feeRate);
+    error RealVault__MinimumRebaseInterval(uint256 minInterval);
 
     /**
      * @param _intialOwner Address of the initial owner of the contract.

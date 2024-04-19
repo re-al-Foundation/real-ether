@@ -6,17 +6,6 @@ import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IAssetsVault} from "./interfaces/IAssetsVault.sol";
 
-error StrategyManager__ZeroAddress();
-error StrategyManager__ZeroStrategy();
-error StrategyManager__InvalidLength();
-error StrategyManager__InvalidRatio();
-error StrategyManager__InvalidPercentage();
-error StrategyManager__NotVault();
-error StrategyManager__InvalidManager();
-error StrategyManager__MinAllocation(uint256 minAllocation);
-error StrategyManager__StillActive(address strategy);
-error StrategyManager__AlreadyExist(address strategy);
-
 /**
  * @title Strategy Manager
  * @author Mavvverick
@@ -53,6 +42,17 @@ contract StrategyManager {
     mapping(address => uint256) public ratios;
 
     event VaultUpdated(address indexed oldRealVault, address newRealVault);
+
+    error StrategyManager__ZeroAddress();
+    error StrategyManager__ZeroStrategy();
+    error StrategyManager__InvalidLength();
+    error StrategyManager__InvalidRatio();
+    error StrategyManager__InvalidPercentage();
+    error StrategyManager__NotVault();
+    error StrategyManager__InvalidManager();
+    error StrategyManager__MinAllocation(uint256 minAllocation);
+    error StrategyManager__StillActive(address strategy);
+    error StrategyManager__AlreadyExist(address strategy);
 
     /**
      * @param _realVault Address of the RealVault contract.

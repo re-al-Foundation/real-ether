@@ -25,5 +25,7 @@ contract UnderlyingYieldGenerator {
         TransferHelper.safeTransferETH(assetVault, 10 ether);
     }
 
+    function test() public {}
+
     receive() external payable {}
 }

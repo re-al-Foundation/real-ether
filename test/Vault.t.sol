@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.21;
 
-import {Test, console2} from "forge-std/Test.sol";
-
 import {Real} from "src/token/Real.sol";
 import {Minter} from "src/token/Minter.sol";
 import {RealVault} from "src/RealVault.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {ShareMath} from "src/libraries/ShareMath.sol";
 import {StrategyManager} from "src/StrategyManager.sol";
 import {AssetsVault} from "src/AssetsVault.sol";
 import {TestEthStrategy} from "src/mock/TestEthStrategy.sol";
+import {TestEthStrategy2} from "src/mock/TestEthStrategy2.sol";
 import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 
 contract VaultTest is Test {
-    error RealVault__WithdrawInstantly();
-    error RealVault__MininmumWithdraw();
+    error OwnableUnauthorizedAccount(address);
 
     uint256 PRECISION = 10 ** 18;
     uint256 MIN_SHARES = 1_00;
@@ -25,6 +24,7 @@ contract VaultTest is Test {
     StrategyManager public strategyManager;
     AssetsVault public assetsVault;
     TestEthStrategy public s1;
+    TestEthStrategy2 public s;
 
     address minterAddress;
     address realVaultAddress;
@@ -38,6 +38,7 @@ contract VaultTest is Test {
     Account public proposal;
 
     uint256 epoch0;
+    mapping(uint256 => uint256) public bal;
 
     function setUp() public {
         user = makeAccount("user");
@@ -117,13 +118,11 @@ contract VaultTest is Test {
 
         // Request Withraw in Round#0
         uint256 bal = real.balanceOf(user.addr);
-        vm.expectRevert(abi.encodeWithSelector(RealVault__WithdrawInstantly.selector));
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__WithdrawInstantly.selector));
 
         realVault.requestWithdraw(bal);
         vm.stopPrank();
     }
-
-    mapping(uint256 => uint256) public bal;
 
     function test_dust() public {
         uint256 amount = 1 ether;
@@ -705,7 +704,7 @@ contract VaultTest is Test {
         realVault.deposit{value: 1 ether}();
 
         // min shares 100 wei
-        vm.expectRevert(abi.encodeWithSelector(RealVault__MininmumWithdraw.selector));
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MininmumWithdraw.selector));
         realVault.requestWithdraw(10);
         vm.stopPrank();
 
@@ -717,12 +716,12 @@ contract VaultTest is Test {
         vm.startPrank(user.addr);
         real.approve(address(realVault), 10_000);
         realVault.requestWithdraw(10_000);
-        
+
         // reETH balance in the realvault should be 10_000 wei after withdraw request
         assertEq(real.balanceOf(address(realVault)), 10_000);
-        
+
         // A minimum of 100 wei shares must remain after a withdrawal.
-        vm.expectRevert(abi.encodeWithSelector(RealVault__MininmumWithdraw.selector));
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MininmumWithdraw.selector));
         realVault.cancelWithdraw(99_50);
 
         // reETH balance in the realvault should be 1_00 wei after canceling the 99_00 wei
@@ -732,5 +731,287 @@ contract VaultTest is Test {
         realVault.cancelWithdraw(1_00);
         assertEq(real.balanceOf(address(realVault)), 0);
         vm.stopPrank();
+    }
+
+    function test_ShareMathAssets() public {
+        vm.expectRevert("ShareMath Lib: Invalid assetPerShare");
+        ShareMath.sharesToAsset(1 ether, 0);
+
+        uint256 assets = ShareMath.sharesToAsset(1 ether, 1 ether);
+        assertEq(assets, 1 ether);
+    }
+
+    function testShouldFailIfCalledByNonOwner() external {
+        vm.startPrank(address(1));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, address(1)));
+        realVault.setRebaseInterval(3_600);
+
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, address(1)));
+        realVault.setWithdrawFeeRate(3_600);
+
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, address(1)));
+        realVault.setMinWithdrawableShares(99);
+
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, address(1)));
+        realVault.setFeeRecipient(address(0));
+        vm.stopPrank();
+    }
+
+    function testShouldPassWhenCalledByOwner() external {
+        vm.startPrank(owner.addr);
+        assertEq(realVault.rebaseTimeInterval(), 86_400);
+
+        realVault.setRebaseInterval(3_600);
+        assertEq(realVault.rebaseTimeInterval(), 3_600);
+
+        assertEq(realVault.minWithdrawableShares(), 1_00);
+        realVault.setMinWithdrawableShares(2_00);
+
+        assertEq(realVault.minWithdrawableShares(), 2_00);
+        assertEq(realVault.withdrawFeeRate(), 0);
+
+        realVault.setWithdrawFeeRate(100);
+        assertEq(realVault.withdrawFeeRate(), 100);
+
+        assertEq(realVault.feeRecipient(), address(0));
+        realVault.setFeeRecipient(address(1));
+        assertEq(realVault.feeRecipient(), address(1));
+        vm.stopPrank();
+    }
+
+    function testShouldFailIfCalledByNonProposalAddress() external {
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__NotProposal.selector));
+        realVault.updateProposal(address(0));
+    }
+
+    function testShouldFailIfRollToNextRoundIsNotDue() external {
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__NotReady.selector));
+        realVault.rollToNextRound();
+    }
+
+    function testShouldPassIfCalledByProposalAddress() external {
+        vm.startPrank(proposal.addr);
+        assertEq(realVault.proposal(), proposal.addr);
+
+        realVault.updateProposal(address(1));
+
+        assertEq(realVault.proposal(), address(1));
+        vm.stopPrank();
+    }
+
+    function testShouldFailToSetRebaseInterval() external {
+        vm.startPrank(owner.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MinimumRebaseInterval.selector, 3600));
+        realVault.setRebaseInterval(3_601);
+        vm.stopPrank();
+    }
+
+    function testShouldFailToSetMinWithdrawableShares() external {
+        vm.startPrank(owner.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MinimumWithdrawableShares.selector));
+        realVault.setMinWithdrawableShares(99);
+        vm.stopPrank();
+    }
+
+    function testShouldFailToSetWithdrawFeeRateIfFeeAboveMaxFee() external {
+        vm.startPrank(owner.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ExceedMaxFeeRate.selector, 10_001));
+        realVault.setWithdrawFeeRate(10_001);
+        vm.stopPrank();
+    }
+
+    function testShouldFailIfAddressIsZero() external {
+        vm.startPrank(owner.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ZeroAddress.selector));
+        realVault.setFeeRecipient(address(0));
+        vm.stopPrank();
+
+        vm.startPrank(proposal.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ZeroAddress.selector));
+        realVault.updateProposal(address(0));
+        vm.stopPrank();
+    }
+
+    function testShouldFailIfValueIsZero() external {
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
+        realVault.requestWithdraw(0);
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
+        realVault.settleWithdrawDust(0);
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
+        realVault.deposit{value: 0}();
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
+        realVault.cancelWithdraw(0);
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
+        realVault.instantWithdraw(0, 0);
+    }
+
+    function testShouldFailIfAmountIsAboveUserWithdrawableAmount() external {
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ExceedWithdrawAmount.selector));
+        realVault.instantWithdraw(1, 0);
+    }
+
+    function testShouldFailIfAmountisAboveDust() external {
+        bytes32 withdrawAmountDustSlot = bytes32(uint256(12));
+        bytes32 withdrawAmountDustValue = bytes32(uint256(1 ether));
+
+        vm.store(address(realVault), withdrawAmountDustSlot, withdrawAmountDustValue);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ExceedBalance.selector));
+        realVault.settleWithdrawDust(2 ether);
+    }
+
+    function testShouldReducePastWithdrawableAmountWithDust() external {
+        bytes32 withdrawAmountDustSlot = bytes32(uint256(12));
+        bytes32 withdrawableAmountInPastSlot = bytes32(uint256(9));
+
+        bytes32 withdrawAmountDustValue = bytes32(uint256(2 ether));
+        bytes32 withdrawableAmountInPastValue = bytes32(uint256(5 ether));
+
+        vm.store(address(realVault), withdrawAmountDustSlot, withdrawAmountDustValue);
+        vm.store(address(realVault), withdrawableAmountInPastSlot, withdrawableAmountInPastValue);
+
+        assertEq(realVault.withdrawAmountDust(), 2 ether);
+        assertEq(realVault.withdrawableAmountInPast(), 5 ether);
+
+        realVault.settleWithdrawDust(1 ether);
+
+        assertEq(realVault.withdrawAmountDust(), 1 ether);
+        assertEq(realVault.withdrawableAmountInPast(), 4 ether);
+    }
+
+    function testShouldMigrateVault() external {
+        vm.startPrank(address(minter));
+        real.mint(address(realVault), 1 ether); // mint real token to increase totalSupply from  zero
+        vm.stopPrank();
+
+        RealVault newVault = new RealVault(
+            address(owner.addr),
+            minterAddress,
+            payable(assetVaultAddress),
+            payable(strategyManagerAddress),
+            address(proposal.addr)
+        );
+
+        assertEq(minter.vault(), address(realVault));
+        assertEq(assetsVault.realVault(), address(realVault));
+
+        assertEq(strategyManager.realVault(), address(realVault));
+        assertEq(real.balanceOf(address(realVault)), 1 ether);
+
+        vm.startPrank(proposal.addr);
+        realVault.migrateVault(address(newVault));
+        vm.stopPrank();
+
+        assertEq(minter.vault(), address(newVault));
+        assertEq(assetsVault.realVault(), address(newVault));
+
+        assertEq(strategyManager.realVault(), address(newVault));
+        assertEq(real.balanceOf(address(realVault)), 0);
+        assertEq(real.balanceOf(address(newVault)), 1 ether);
+    }
+
+    function testCancelWithdrawShouldFailIfAmountExceedUserShares() public {
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ExceedRequestedAmount.selector, 1, 0));
+        realVault.cancelWithdraw(1);
+    }
+
+    function testCancelWithdrawShouldFailIfRequestIsNotFound() public {
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+
+        realVault.deposit{value: 1 ether}();
+        vm.stopPrank();
+
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        vm.startPrank(user.addr);
+        real.approve(address(realVault), 10_000);
+        realVault.requestWithdraw(10_000);
+
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__NoRequestFound.selector));
+        realVault.cancelWithdraw(10_000);
+        vm.stopPrank();
+    }
+
+    function testShouldFailIfVaultDoesNotHaveEnoughEther() public {
+        address[] memory strategies = new address[](1);
+        uint256[] memory ratios = new uint256[](1);
+
+        s = new TestEthStrategy2(payable(strategyManagerAddress), "Mock Eth Investment");
+        strategies[0] = address(s);
+        ratios[0] = 1000_000; // 1e6
+
+        vm.startPrank(proposal.addr);
+        realVault.updateInvestmentPortfolio(strategies, ratios);
+        vm.stopPrank();
+
+        vm.startPrank(owner.addr);
+        realVault.destroyStrategy(address(s1));
+        vm.stopPrank();
+
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+        realVault.deposit{value: 1 ether}();
+        vm.stopPrank();
+
+        vm.warp(epoch0 + realVault.rebaseTimeInterval());
+        realVault.rollToNextRound();
+
+        vm.startPrank(user.addr);
+        real.approve(address(realVault), 10_000);
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__WaitInQueue.selector));
+        realVault.instantWithdraw(0, 10_000);
+        vm.stopPrank();
+    }
+
+    function testRequestWithdrawShouldFailIfShareIsAboveUserBalance() public {
+        deal(user.addr, 1 ether);
+        vm.startPrank(user.addr);
+
+        realVault.deposit{value: 1 ether}();
+        vm.warp(block.timestamp + realVault.rebaseTimeInterval());
+
+        realVault.rollToNextRound();
+        uint256 balance = real.balanceOf(user.addr);
+
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__ExceedBalance.selector));
+        realVault.requestWithdraw(balance + 1);
+        vm.stopPrank();
+    }
+
+    function test_round0InstantWithdrawWithFee() public {
+        vm.startPrank(owner.addr);
+        realVault.setWithdrawFeeRate(100);
+
+        realVault.setFeeRecipient(address(1));
+        vm.stopPrank();
+
+        deal(user.addr, 2 ether);
+        vm.startPrank(user.addr);
+
+        // Deposit in Round#0
+        realVault.deposit{value: 1 ether}();
+
+        assertEq(address(assetsVault).balance, 1 ether);
+        assertEq(user.addr.balance, 1 ether);
+
+        // Instant withdraw in Round#0
+        realVault.instantWithdraw(0, real.balanceOf(user.addr));
+        vm.stopPrank();
+
+        uint256 feeAmount = (1 ether * 100) / 100_0000;
+        assertEq(real.balanceOf(user.addr), 0 ether);
+
+        assertEq(address(assetsVault).balance, 0 ether);
+        assertEq(user.addr.balance, 2 ether - feeAmount);
+        assertEq(address(1).balance, feeAmount);
     }
 }

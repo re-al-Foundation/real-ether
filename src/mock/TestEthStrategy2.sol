@@ -8,7 +8,7 @@ import {IStrategyManager} from "../interfaces/IStrategyManager.sol";
 error Strategy__ZeroAmount();
 error Strategy__InsufficientBalance();
 
-contract TestEthStrategy is Strategy {
+contract TestEthStrategy2 is Strategy {
     address public swapManager;
     uint256 pendingReserve;
 
@@ -29,7 +29,7 @@ contract TestEthStrategy is Strategy {
         if (_amount == 0) revert Strategy__ZeroAmount();
         if (_amount > getTotalValue()) revert Strategy__InsufficientBalance();
         actualAmount = _amount;
-        TransferHelper.safeTransferETH(manager, _amount);
+        TransferHelper.safeTransferETH(manager, _amount - 1);
     }
 
     function clear() external override onlyManager returns (uint256 amount) {
