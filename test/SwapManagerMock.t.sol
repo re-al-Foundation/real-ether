@@ -10,6 +10,8 @@ import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {StETHVCurveMockPool} from "src/mock/StETHVCurveMockPool.sol";
 import {WstETHV3MockPool} from "src/mock/WstETHV3MockPool.sol";
 import {v3SwapRouterMock} from "src/mock/v3SwapRouterMock.sol";
+import {LidoStEthStrategy} from "src/strategy/LidoStEthStrategy.sol";
+import {IWStETH} from "src/interfaces/IWStETH.sol";
 
 /**
  * @title Swap Manager Mock Test Cases
@@ -170,6 +172,54 @@ contract SwapManagerMockTest is Test {
         wstETH_ETH.setTickCumulatives(0, 1897089600);
         amount = swapManager.estimateV3AmountOut(1 ether, wstETH, WETH9);
         assertEq(amount, 76705880768030338428159535831433241511516);
+    }
+
+    function test_RevertInstantWithdraw() public {
+        swapManager.setTokenSlippage(NULL, 5_00_00); //5%
+        swapManager.setTokenSlippage(WETH9, 5_00_00); //5%
+
+        vm.startPrank(address(lidoStEthStrategy));
+        deal(wstETH, address(lidoStEthStrategy), 2 ether);
+        IWStETH(wstETH).unwrap(2 ether);
+        vm.stopPrank();
+
+        vm.startPrank(address(strategyManager));
+        deal(WETH9, address(swapManager), 1 ether);
+        v3SwapRouter.setAmountOut(0.99 ether);
+        lidoStEthStrategy.instantWithdraw(1 ether);
+        assertEq(address(this).balance, 79228162514264337593543950335);
+
+        vm.startPrank(address(strategyManager));
+        deal(WETH9, address(swapManager), 0.8 ether);
+        v3SwapRouter.setAmountOut(0.99 ether);
+        vm.expectRevert();
+        lidoStEthStrategy.instantWithdraw(1 ether);
+
+        deal(WETH9, address(swapManager), 1 ether);
+        deal(address(swapManager), 1 ether);
+        v3SwapRouter.setAmountOut(0.1 ether);
+        stETH_ETH.setAmountOut(0.99 ether);
+        lidoStEthStrategy.instantWithdraw(1 ether);
+        assertEq(address(this).balance, 79228162514264337593543950335);
+        vm.stopPrank();
+    }
+
+    function test_RevertClear() public {
+        swapManager.setTokenSlippage(NULL, 5_00_00); //5%
+        swapManager.setTokenSlippage(WETH9, 5_00_00); //5%
+
+        vm.startPrank(address(lidoStEthStrategy));
+        deal(wstETH, address(lidoStEthStrategy), 1 ether);
+        IWStETH(wstETH).unwrap(1 ether);
+        vm.stopPrank();
+
+        vm.startPrank(address(strategyManager));
+        deal(address(swapManager), 1 ether);
+        v3SwapRouter.setAmountOut(0.98 ether);
+        stETH_ETH.setAmountOut(0.99 ether);
+        lidoStEthStrategy.clear();
+        assertEq(address(1).balance, 56759646223094277158);
+        vm.stopPrank();
     }
 
     receive() external payable {}

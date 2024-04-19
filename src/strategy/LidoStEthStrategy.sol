@@ -107,7 +107,6 @@ contract LidoStEthStrategy is Strategy {
             TransferHelper.safeApprove(address(STETH), WSTETH, _amountIn);
             _amountIn = IWStETH(WSTETH).wrap(_amountIn);
 
-            if (_amountIn == 0) revert Strategy__StETHWrap();
             tokenIn = WSTETH;
 
             TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
@@ -128,7 +127,7 @@ contract LidoStEthStrategy is Strategy {
         returns (uint256[] memory ids, uint256 totalClaimable, uint256 totalPending)
     {
         uint256 requestLen = requestIds.length;
-        if (requestLen == 0) return (new uint256[](0), 0, 0);
+        if (requestLen == 0) return (ids, 0, 0);
         ids = new uint256[](requestLen);
 
         IWithdrawalQueueERC721.WithdrawalRequestStatus[] memory statuses =
@@ -157,10 +156,6 @@ contract LidoStEthStrategy is Strategy {
             unchecked {
                 i++;
             }
-        }
-
-        assembly {
-            mstore(ids, index)
         }
     }
 
@@ -196,27 +191,18 @@ contract LidoStEthStrategy is Strategy {
         uint256 index;
 
         while (remainingBalance != 0) {
-            if (remainingBalance > MAX_STETH_WITHDRAWAL_AMOUNT) {
-                requestedAmounts[index] = MAX_STETH_WITHDRAWAL_AMOUNT;
-            } else {
-                requestedAmounts[index] = remainingBalance;
-            }
+            requestedAmounts[index] =
+                remainingBalance > MAX_STETH_WITHDRAWAL_AMOUNT ? MAX_STETH_WITHDRAWAL_AMOUNT : remainingBalance;    
             unchecked {
                 remainingBalance -= requestedAmounts[index];
                 index++;
             }
         }
 
-        // reset the array length to remove empty values
-        assembly {
-            mstore(requestedAmounts, index)
-        }
-
         //raise a withdraw request to WithdrawalQueueERC721
         uint256[] memory ids = stETHWithdrawalQueue.requestWithdrawals(requestedAmounts, address(this));
 
         uint256 idsLen = ids.length;
-        if (idsLen == 0) revert Strategy__LidoRequestWithdraw();
 
         // push the withdraw request id
         for (uint256 i = 0; i < idsLen;) {
@@ -266,7 +252,8 @@ contract LidoStEthStrategy is Strategy {
      *  Reverts if any request is not finalized or already claimed
      */
     function claimAllPendingAssetsByIds(uint256[] memory claimableRequestIds, uint256[] memory hints) external {
-        //calim withdrawal amount
+        // Claim withdrawal amount
+        // Reverts if any request is not finalized or already claimed
         stETHWithdrawalQueue.claimWithdrawals(claimableRequestIds, hints);
 
         // remove claimed request Ids
@@ -279,9 +266,7 @@ contract LidoStEthStrategy is Strategy {
         }
 
         // Transfer the claimed asset to the assets vault
-        if (address(this).balance > 0) {
-            TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
-        }
+        TransferHelper.safeTransferETH(IStrategyManager(manager).assetsVault(), address(this).balance);
     }
 
     /**
@@ -309,8 +294,7 @@ contract LidoStEthStrategy is Strategy {
         // Transfer left over dust shares to the asset vault
         uint256 share = STETH.sharesOf(address(this));
         if (share > 0) {
-            uint256 sharesValue = STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
-            if (sharesValue == 0) revert Strategy__LidoSharesTransfer();
+           STETH.transferShares(IStrategyManager(manager).assetsVault(), share);
         }
     }
 

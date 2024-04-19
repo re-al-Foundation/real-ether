@@ -10,7 +10,7 @@ contract v3SwapRouterMock {
         amountOut = _amount;
     }
 
-    function exactInputSingle(ISwapRouter.ExactInputSingleParams calldata) external returns (uint256) {
+    function exactInputSingle(ISwapRouter.ExactInputSingleParams calldata) external view returns (uint256) {
         return amountOut;
     }
 
