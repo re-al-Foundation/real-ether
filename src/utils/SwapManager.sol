@@ -12,8 +12,8 @@ import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {ICurvePool} from "../interfaces/ICurvePool.sol";
 import {IWETH9} from "../interfaces/IWETH9.sol";
 
-import {TickMath} from "../libraries/TickMath.sol";
-import {FullMath} from "../libraries/FullMath.sol";
+import {TickMath} from "v3-core-0.8/libraries/TickMath.sol";
+import {FullMath} from "v3-core-0.8/libraries/FullMath.sol";
 
 error SwapManager__SlippageNotSet();
 error SwapManager__ZeroAddress();
