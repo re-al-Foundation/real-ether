@@ -86,6 +86,8 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     event MinWithdrawableSharesUpdated(uint256 indexed minShares);
 
     error RealVault__NotReady();
+    error RealVault__Migrated();
+    error RealVault__InsufficientShares();
     error RealVault__InvalidAmount();
     error RealVault__ZeroAddress();
     error RealVault__MininmumWithdraw();
@@ -145,8 +147,8 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
      * @dev Deposit assets into the RealVault.
      * @return mintAmount The amount of shares minted.
      */
-    function deposit() external payable nonReentrant returns (uint256 mintAmount) {
-        mintAmount = _depositFor(msg.sender, msg.sender, msg.value);
+    function deposit(uint256 mintAmountMin) external payable nonReentrant returns (uint256 mintAmount) {
+        mintAmount = _depositFor(msg.sender, msg.sender, msg.value, mintAmountMin);
     }
 
     /**
@@ -154,8 +156,13 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
      * @param receiver Address to receive the minted shares.
      * @return mintAmount The amount of shares minted.
      */
-    function depositFor(address receiver) external payable nonReentrant returns (uint256 mintAmount) {
-        mintAmount = _depositFor(msg.sender, receiver, msg.value);
+    function depositFor(address receiver, uint256 mintAmountMin)
+        external
+        payable
+        nonReentrant
+        returns (uint256 mintAmount)
+    {
+        mintAmount = _depositFor(msg.sender, receiver, msg.value, mintAmountMin);
     }
 
     /**
@@ -459,10 +466,15 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     }
 
     // [INTERNAL FUNCTIONS]
-    function _depositFor(address caller, address receiver, uint256 assets) internal returns (uint256 mintAmount) {
+    function _depositFor(address caller, address receiver, uint256 assets, uint256 mintAmountMin)
+        internal
+        returns (uint256 mintAmount)
+    {
         if (assets == 0) revert RealVault__InvalidAmount();
 
         mintAmount = previewDeposit(address(this).balance); // shares amount to be minted
+        if (mintAmount < mintAmountMin) revert RealVault__InsufficientShares();
+
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
         IMinter(minter).mint(receiver, mintAmount);
         emit Deposit(caller, receiver, assets, mintAmount);

@@ -69,7 +69,7 @@ contract DeployTestnetScript is Script {
 
     function _mintShareTo0xdead(uint256 _value) internal {
         if (block.chainid != 31337) {
-            realVault.depositFor{value: _value}(address(0xdead));
+            realVault.depositFor{value: _value}(address(0xdead), 0);
         }
     }
 

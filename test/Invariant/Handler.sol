@@ -78,7 +78,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
             deal(currentActor, amount);
 
             vm.startPrank(currentActor);
-            realVault.deposit{value: amount}();
+            realVault.deposit{value: amount}(0);
 
             vm.stopPrank();
             ghost_ethInVault += amount;

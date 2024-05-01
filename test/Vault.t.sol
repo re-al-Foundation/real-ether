@@ -15,6 +15,7 @@ import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 contract VaultTest is Test {
     error OwnableUnauthorizedAccount(address);
 
+    uint256 public constant ZERO_VALUE = 0;
     uint256 PRECISION = 10 ** 18;
     uint256 MIN_SHARES = 1_00;
 
@@ -90,7 +91,7 @@ contract VaultTest is Test {
     function test_deposit() public {
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         assertEq(address(realVault).balance, 0 ether);
@@ -101,7 +102,7 @@ contract VaultTest is Test {
     function test_depositTo0xdead() public {
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
-        realVault.depositFor{value: 1 ether}(address(0xdead));
+        realVault.depositFor{value: 1 ether}(address(0xdead), ZERO_VALUE);
         vm.stopPrank();
 
         assertEq(address(realVault).balance, 0 ether);
@@ -109,12 +110,20 @@ contract VaultTest is Test {
         assertEq(real.balanceOf(user.addr), 0 ether);
     }
 
+    function test_depositFail() public {
+        deal(user.addr, 10 ether);
+        vm.startPrank(user.addr);
+        vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InsufficientShares.selector));
+        realVault.deposit{value: 1 ether}(10 ether);
+        vm.stopPrank();
+    }
+
     function test_requestWithdrawFail() public {
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
 
         // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         // Request Withraw in Round#0
         uint256 bal = real.balanceOf(user.addr);
@@ -130,7 +139,7 @@ contract VaultTest is Test {
         deal(address(7), amount);
 
         vm.startPrank(address(7));
-        uint256 shares = realVault.deposit{value: amount}();
+        uint256 shares = realVault.deposit{value: amount}(ZERO_VALUE);
 
         bal[0] = shares;
         vm.stopPrank();
@@ -141,7 +150,7 @@ contract VaultTest is Test {
 
         for (uint256 i = 1; i < 20; i++) {
             vm.startPrank(address(2));
-            shares = realVault.deposit{value: amount}();
+            shares = realVault.deposit{value: amount}(ZERO_VALUE);
 
             bal[i] = shares;
             vm.stopPrank();
@@ -174,7 +183,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount}();
+            realVault.deposit{value: amount}(ZERO_VALUE);
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
             // roll epoch to next round
@@ -215,7 +224,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount * 2}();
+            realVault.deposit{value: amount * 2}(ZERO_VALUE);
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
             // roll epoch to next round
@@ -256,7 +265,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount * 2}();
+            realVault.deposit{value: amount * 2}(ZERO_VALUE);
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
             // roll epoch to next round
@@ -304,7 +313,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount}();
+            realVault.deposit{value: amount}(ZERO_VALUE);
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
             realVault.rollToNextRound();
@@ -346,7 +355,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount * 2}();
+            realVault.deposit{value: amount * 2}(ZERO_VALUE);
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
 
             realVault.rollToNextRound();
@@ -380,7 +389,7 @@ contract VaultTest is Test {
             vm.startPrank(userAddress);
 
             // Deposit in Round#0
-            realVault.deposit{value: amount}();
+            realVault.deposit{value: amount}(ZERO_VALUE);
 
             vm.warp(epoch0 + realVault.rebaseTimeInterval());
             realVault.rollToNextRound();
@@ -422,7 +431,7 @@ contract VaultTest is Test {
         vm.startPrank(user.addr);
 
         // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         assertEq(address(assetsVault).balance, 1 ether);
         assertEq(user.addr.balance, 1 ether);
@@ -441,7 +450,7 @@ contract VaultTest is Test {
         vm.startPrank(user.addr);
 
         // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -460,7 +469,7 @@ contract VaultTest is Test {
 
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -474,7 +483,7 @@ contract VaultTest is Test {
 
         // deposit in Round#1 by user2 at 909090909090909090 pps
         vm.startPrank(user2.addr);
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         assertEq(address(assetsVault).balance, 1 ether);
@@ -490,7 +499,7 @@ contract VaultTest is Test {
 
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -507,7 +516,7 @@ contract VaultTest is Test {
 
         // deposit in Round#1 by user2 at 909090909090909090 pps
         vm.startPrank(user2.addr);
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         price = real.tokenPrice();
@@ -589,7 +598,7 @@ contract VaultTest is Test {
 
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
         // roll epoch to Round#2
@@ -623,7 +632,7 @@ contract VaultTest is Test {
 
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
         // roll epoch to Round#2
@@ -660,7 +669,7 @@ contract VaultTest is Test {
 
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         // increment the time to the next round
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
         // roll epoch to Round#2
@@ -701,7 +710,7 @@ contract VaultTest is Test {
         deal(user.addr, 2 ether);
         vm.startPrank(user.addr);
         // deposit in Round#0 by user1 at 1 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         // min shares 100 wei
         vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MininmumWithdraw.selector));
@@ -840,7 +849,7 @@ contract VaultTest is Test {
         realVault.settleWithdrawDust(0);
 
         vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
-        realVault.deposit{value: 0}();
+        realVault.deposit{value: 0}(ZERO_VALUE);
 
         vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__InvalidAmount.selector));
         realVault.cancelWithdraw(0);
@@ -922,7 +931,7 @@ contract VaultTest is Test {
         deal(user.addr, 2 ether);
         vm.startPrank(user.addr);
 
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -958,7 +967,7 @@ contract VaultTest is Test {
 
         deal(user.addr, 2 ether);
         vm.startPrank(user.addr);
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -976,7 +985,7 @@ contract VaultTest is Test {
         deal(user.addr, 1 ether);
         vm.startPrank(user.addr);
 
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.warp(block.timestamp + realVault.rebaseTimeInterval());
 
         realVault.rollToNextRound();
@@ -998,7 +1007,7 @@ contract VaultTest is Test {
         vm.startPrank(user.addr);
 
         // Deposit in Round#0
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
 
         assertEq(address(assetsVault).balance, 1 ether);
         assertEq(user.addr.balance, 1 ether);
