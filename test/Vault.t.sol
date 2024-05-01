@@ -802,7 +802,7 @@ contract VaultTest is Test {
     function testShouldFailToSetRebaseInterval() external {
         vm.startPrank(owner.addr);
         vm.expectRevert(abi.encodeWithSelector(RealVault.RealVault__MinimumRebaseInterval.selector, 3600));
-        realVault.setRebaseInterval(3_601);
+        realVault.setRebaseInterval(2_000);
         vm.stopPrank();
     }
 

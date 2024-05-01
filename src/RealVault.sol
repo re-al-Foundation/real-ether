@@ -530,7 +530,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
      * - The new interval must not be less than the minimum rebase interval.
      */
     function setRebaseInterval(uint256 _interval) external onlyOwner {
-        if (_interval > MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
+        if (_interval < MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
         rebaseTimeInterval = _interval;
         emit SetRebaseInterval(rebaseTimeInterval);
     }
