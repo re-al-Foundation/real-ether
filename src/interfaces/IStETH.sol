@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.0;
+pragma solidity =0.8.21;
 
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "oz/token/ERC20/extensions/IERC20Permit.sol";
