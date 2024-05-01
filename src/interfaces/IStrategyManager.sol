@@ -38,6 +38,11 @@ interface IStrategyManager {
     function rebaseStrategies(uint256 amountIn, uint256 amountOut) external;
 
     /**
+     * @dev Rebalances the strategies without incoming and outgoing amounts.
+     */
+    function onlyRebaseStrategies() external;
+
+    /**
      * @dev Forces a withdrawal of a specified amount of ETH from the strategies.
      * @param ethAmount The amount of ETH to withdraw.
      * @return actualAmount The actual amount of ETH withdrawn.

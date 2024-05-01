@@ -104,7 +104,9 @@ contract StrategyManagerTest is Test {
     }
 
     function testShouldOnlyRebaseStrategies() public {
-        strategyManager.onlyRebaseStrategies();
+        vm.startPrank(proposal.addr);
+        realVault.onlyRebaseStrategies();
+        vm.stopPrank();
     }
 
     function testShouldFailWhenInAndOutValuesAreNonZero() external {

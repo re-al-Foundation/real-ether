@@ -333,6 +333,13 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     }
 
     /**
+     * @dev Rebalances the strategies without incoming and outgoing amounts.
+     */
+    function onlyRebaseStrategies() external nonReentrant onlyProposal {
+        IStrategyManager(strategyManager).onlyRebaseStrategies();
+    }
+
+    /**
      * @dev Transition to the next round, managing vault balances and share prices.
      */
     function rollToNextRound() external nonReentrant {

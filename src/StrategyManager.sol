@@ -179,7 +179,7 @@ contract StrategyManager {
      * @notice Executes rebase for strategies.
      * update the existing balance in the strategies
      */
-    function onlyRebaseStrategies() external {
+    function onlyRebaseStrategies() external onlyVault {
         _rebase(0, 0);
     }
 
