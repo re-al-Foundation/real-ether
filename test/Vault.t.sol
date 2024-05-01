@@ -855,7 +855,7 @@ contract VaultTest is Test {
     }
 
     function testShouldFailIfAmountisAboveDust() external {
-        bytes32 withdrawAmountDustSlot = bytes32(uint256(12));
+        bytes32 withdrawAmountDustSlot = bytes32(uint256(13));
         bytes32 withdrawAmountDustValue = bytes32(uint256(1 ether));
 
         vm.store(address(realVault), withdrawAmountDustSlot, withdrawAmountDustValue);
@@ -864,8 +864,8 @@ contract VaultTest is Test {
     }
 
     function testShouldReducePastWithdrawableAmountWithDust() external {
-        bytes32 withdrawAmountDustSlot = bytes32(uint256(12));
-        bytes32 withdrawableAmountInPastSlot = bytes32(uint256(9));
+        bytes32 withdrawAmountDustSlot = bytes32(uint256(13));
+        bytes32 withdrawableAmountInPastSlot = bytes32(uint256(10));
 
         bytes32 withdrawAmountDustValue = bytes32(uint256(2 ether));
         bytes32 withdrawableAmountInPastValue = bytes32(uint256(5 ether));

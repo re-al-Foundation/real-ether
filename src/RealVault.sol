@@ -5,6 +5,7 @@ pragma solidity =0.8.21;
 
 import {ReentrancyGuard} from "oz/utils/ReentrancyGuard.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {Ownable2Step} from "oz/access/Ownable2Step.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {IReal} from "./interfaces/IReal.sol";
 import {IMinter} from "./interfaces/IMinter.sol";
@@ -25,7 +26,7 @@ import {ShareMath} from "./libraries/ShareMath.sol";
  * future yield staking /re-staking strategy and optimizations, ensuring its continued effectiveness in
  * managing assets and supporting the Real Network infrastructure.
  */
-contract RealVault is ReentrancyGuard, Ownable {
+contract RealVault is ReentrancyGuard, Ownable2Step {
     uint256 internal constant ONE = 1;
     uint256 internal constant MULTIPLIER = 10 ** 18;
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;

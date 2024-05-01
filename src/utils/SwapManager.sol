@@ -3,6 +3,7 @@ pragma solidity =0.8.21;
 
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {Ownable2Step} from "oz/access/Ownable2Step.sol";
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "oz/utils/math/SafeCast.sol";
@@ -25,7 +26,7 @@ error SwapManager__ExceedPercentage(uint256 given, uint256 max);
 error SwapManager__SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
-contract SwapManager is Ownable {
+contract SwapManager is Ownable2Step {
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
 
