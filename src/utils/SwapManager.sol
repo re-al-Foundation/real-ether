@@ -101,9 +101,9 @@ contract SwapManager is Ownable2Step {
         );
 
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
-        uint256 weth9Balance = IWETH9(WETH9).balanceOf(address(this));
-        if (weth9Balance > 0) IWETH9(WETH9).withdraw(weth9Balance);
-
+        
+        // After the swap, the balance of WETH9 will always remain greater than 0
+        IWETH9(WETH9).withdraw(IWETH9(WETH9).balanceOf(address(this)));
         amountOut = address(this).balance;
         TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
@@ -126,6 +126,8 @@ contract SwapManager is Ownable2Step {
 
         (int128 _inIdx, int128 _outIdx) = _getCurveTokenIndex(pool, tokenIn);
         amountOut = ICurvePool(pool).exchange(_inIdx, _outIdx, amountIn, amountOutMinimum);
+
+        if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
 
         amountOut = address(this).balance;
         TransferHelper.safeTransferETH(msg.sender, amountOut);

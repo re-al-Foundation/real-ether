@@ -86,13 +86,6 @@ contract SwapManagerMockTest is Test {
         vm.expectRevert();
         swapManager.swapCurve(wstETH, 0, 10);
 
-        // // SwapManager__SlippageNotSet
-        // vm.expectRevert();
-        // swapManager.swapUinv3(wstETH, 0, 0);
-
-        // vm.expectRevert();
-        // swapManager.swapCurve(stETH, 0, 0);
-
         swapManager.setTokenSlippage(NULL, 5_00_00); //5%
         swapManager.setTokenSlippage(WETH9, 5_00_00); //5%
 
@@ -103,11 +96,20 @@ contract SwapManagerMockTest is Test {
         vm.expectRevert();
         swapManager.swapCurve(stETH, 0, 0);
 
+        // stETH pool SwapManager__SlippageExceeded
+        deal(wstETH, address(this), 2 ether);
+        IWStETH(wstETH).unwrap(2 ether);
+        stETH_ETH.setAmountOut(0.94 ether);
+        IERC20(stETH).approve(address(swapManager), 1 ether);
+        vm.expectRevert();
+        swapManager.swapCurve(stETH, 1 ether, 0.98 ether);
+
+        // wstETH pool SwapManager__SlippageExceeded
         deal(wstETH, address(this), 2 ether);
         v3SwapRouter.setAmountOut(0.94 ether);
         IERC20(wstETH).approve(address(swapManager), 1 ether);
         vm.expectRevert();
-        swapManager.swapUinv3(wstETH, 1 ether, 0.98 ether);
+        swapManager.swapUinv3(wstETH, 1 ether, 0.97 ether);
 
         v3SwapRouter.setAmountOut(0.99 ether);
         IERC20(wstETH).approve(address(swapManager), 1 ether);
