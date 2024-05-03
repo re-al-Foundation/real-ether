@@ -75,11 +75,10 @@ contract SwapManager is Ownable2Step {
      * @param amountIn The amount of input tokens.
      * @return amountOut The amount of output tokens.
      */
-    function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
-        // estimate price using the twap
-        uint128 amountInUint128 = amountIn.toUint128();
-        uint256 quoteOut = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
-        uint256 amountOutMinimum = getMinimumAmount(WETH9, quoteOut);
+    function swapUinv3(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        public
+        returns (uint256 amountOut)
+    {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         address pool = _getV3Pool(tokenIn);
@@ -115,14 +114,12 @@ contract SwapManager is Ownable2Step {
      * @param amountIn The amount of input tokens.
      * @return amountOut The amount of output tokens.
      */
-    function swapCurve(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
-        address pool = _getCurvePool(tokenIn);
-        (address token0, address token1) = _getCurvPoolTokens(pool);
-        address tokenOut = token0 == tokenIn ? token1 : token0;
-
-        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn);
-        uint256 amountOutMinimum = getMinimumAmount(tokenOut, quoteOut);
+    function swapCurve(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        public
+        returns (uint256 amountOut)
+    {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
+        address pool = _getCurvePool(tokenIn);
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
         IERC20(tokenIn).forceApprove(pool, amountIn);

@@ -44,9 +44,13 @@ interface ISwapManager {
      */
     function getFairQuote(address tokenIn, uint256 amountIn) external returns (uint256 amountOut);
 
-    function swapUinv3(address tokenIn, uint256 amountIn) external returns (uint256 amountOut);
+    function swapUinv3(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        external
+        returns (uint256 amountOut);
 
-    function swapCurve(address tokenIn, uint256 amountIn) external returns (uint256 amountOut);
+    function swapCurve(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        external
+        returns (uint256 amountOut);
 
     function getMinimumAmount(address token, uint256 amount) external view returns (uint256);
 
