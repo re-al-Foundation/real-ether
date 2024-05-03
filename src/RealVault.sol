@@ -598,7 +598,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     function currentSharePrice() public view returns (uint256 price) {
         IReal realToken = IReal(real);
         uint256 totalReal = realToken.totalSupply();
-        if (latestRoundID == 0 || totalReal == 0 || totalReal == withdrawingSharesInPast) {
+        if (latestRoundID == 0) {
             return MULTIPLIER;
         }
 
