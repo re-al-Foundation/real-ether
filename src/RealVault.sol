@@ -71,7 +71,9 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     event InitiateWithdraw(address indexed account, uint256 shares, uint256 round);
     event CancelWithdraw(address indexed account, uint256 amount, uint256 round);
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
-    event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
+    event WithdrawnFromStrategy(
+        address indexed account, uint256 amount, uint256 actualAmount, uint256 totalAmount, uint256 round
+    );
     event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
     event VaultMigrated(address indexed oldVault, address newVault);
     event StrategyAdded(address indexed strategy);
@@ -314,7 +316,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
 
                 actualWithdrawn = actualWithdrawn + actualAmount;
 
-                emit WithdrawnFromStrategy(msg.sender, ethAmount, actualAmount, _latestRoundID);
+                emit WithdrawnFromStrategy(msg.sender, ethAmount, actualAmount, actualWithdrawn, _latestRoundID);
             }
         }
 
