@@ -11,15 +11,11 @@ import {IStrategyManager} from "../interfaces/IStrategyManager.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {IWithdrawalQueueERC721} from "../interfaces/IWithdrawalQueueERC721.sol";
 
-error Strategy__StETHWrap();
 error Strategy__ZeroAmount();
 error Strategy__LidoDeposit();
 error Strategy__ZeroAddress();
 error Strategy__ZeroPoolLiquidity();
-error Strategy__LidoSharesTransfer();
-error Strategy__LidoRequestWithdraw();
 error Strategy__InsufficientBalance();
-error Strategy__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 /**
  * @title LidoStEthStrategy

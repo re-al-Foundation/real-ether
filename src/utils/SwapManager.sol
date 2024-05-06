@@ -30,17 +30,11 @@ contract SwapManager is Ownable2Step {
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
 
-    enum DEX {
-        Uniswap,
-        Curve
-    }
-
     uint256 internal constant ZERO = 0;
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
     uint32 public constant MIN_TWAP_DURATION = 3_600;
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
-    uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
 
     uint32 public twapDuration;
@@ -101,7 +95,7 @@ contract SwapManager is Ownable2Step {
         );
 
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
-        
+
         // After the swap, the balance of WETH9 will always remain greater than 0
         IWETH9(WETH9).withdraw(IWETH9(WETH9).balanceOf(address(this)));
         amountOut = address(this).balance;

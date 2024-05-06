@@ -29,9 +29,7 @@ contract StrategyManager {
     }
 
     uint256 internal cumulativeRatio;
-    uint256 internal constant ONE = 1;
     uint256 internal constant DUST = 10_000;
-    uint256 internal constant MINIMUM_ALLOCATION = 1_0000; // 1%
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000; // 100%
 
     address public realVault;
@@ -46,7 +44,6 @@ contract StrategyManager {
     error StrategyManager__ZeroAddress();
     error StrategyManager__ZeroStrategy();
     error StrategyManager__InvalidLength();
-    error StrategyManager__InvalidRatio();
     error StrategyManager__InvalidPercentage();
     error StrategyManager__NotVault();
     error StrategyManager__InvalidManager();
@@ -350,7 +347,6 @@ contract StrategyManager {
         uint256 length = _strategies.length;
         for (uint256 i; i < length;) {
             if (IStrategy(_strategies[i]).manager() != address(this)) revert StrategyManager__InvalidManager();
-            // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
 
