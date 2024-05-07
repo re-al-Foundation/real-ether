@@ -86,6 +86,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
     event SetRebaseInterval(uint256 indexed interval);
     event SettleWithdrawDust(uint256 indexed dust);
     event MinWithdrawableSharesUpdated(uint256 indexed minShares);
+    event ProposalUpdated(address indexed oldAddr, address newAddr);
 
     error RealVault__NotReady();
     error RealVault__Migrated();
@@ -462,6 +463,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
      */
     function updateProposal(address _proposal) external onlyProposal {
         if (_proposal == address(0)) revert RealVault__ZeroAddress();
+        emit ProposalUpdated(proposal, _proposal);
         proposal = _proposal;
     }
 
