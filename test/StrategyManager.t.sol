@@ -205,4 +205,13 @@ contract StrategyManagerTest is Test {
         strategyManager.addStrategy(address(s1));
         vm.stopPrank();
     }
+
+    function testShouldFailForceWithdraw() external {
+        vm.startPrank(address(realVault));
+        strategyManager.forceWithdraw(0 ether);
+
+        vm.expectRevert();
+        strategyManager.forceWithdraw(1 ether);
+        vm.stopPrank();
+    }
 }

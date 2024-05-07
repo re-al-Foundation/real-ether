@@ -47,6 +47,7 @@ contract StrategyManager {
     error StrategyManager__InvalidPercentage();
     error StrategyManager__NotVault();
     error StrategyManager__InvalidManager();
+    error StrategyManager__InsufficientBalance(address strategy, uint256 availableAmount, uint256 withdrawAmount);
     error StrategyManager__MinAllocation(uint256 minAllocation);
     error StrategyManager__StillActive(address strategy);
     error StrategyManager__AlreadyExist(address strategy);
@@ -306,6 +307,10 @@ contract StrategyManager {
             uint256 withAmount = (_amount * ratios[strategy]) / cumulativeRatio;
 
             if (withAmount != 0) {
+                uint256 availableAmount = IStrategy(strategy).getInvestedValue();
+                if (availableAmount < withAmount) {
+                    revert StrategyManager__InsufficientBalance(strategy, availableAmount, withAmount);
+                }
                 actualAmount = IStrategy(strategy).instantWithdraw(withAmount) + actualAmount;
             }
 
