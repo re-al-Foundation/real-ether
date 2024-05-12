@@ -29,9 +29,7 @@ contract StrategyManager {
     }
 
     uint256 internal cumulativeRatio;
-    uint256 internal constant ONE = 1;
     uint256 internal constant DUST = 10_000;
-    uint256 internal constant MINIMUM_ALLOCATION = 1_0000; // 1%
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000; // 100%
 
     address public realVault;
@@ -46,10 +44,10 @@ contract StrategyManager {
     error StrategyManager__ZeroAddress();
     error StrategyManager__ZeroStrategy();
     error StrategyManager__InvalidLength();
-    error StrategyManager__InvalidRatio();
     error StrategyManager__InvalidPercentage();
     error StrategyManager__NotVault();
     error StrategyManager__InvalidManager();
+    error StrategyManager__InsufficientBalance(address strategy, uint256 availableAmount, uint256 withdrawAmount);
     error StrategyManager__MinAllocation(uint256 minAllocation);
     error StrategyManager__StillActive(address strategy);
     error StrategyManager__AlreadyExist(address strategy);
@@ -179,7 +177,7 @@ contract StrategyManager {
      * @notice Executes rebase for strategies.
      * update the existing balance in the strategies
      */
-    function onlyRebaseStrategies() external {
+    function onlyRebaseStrategies() external onlyVault {
         _rebase(0, 0);
     }
 
@@ -309,6 +307,10 @@ contract StrategyManager {
             uint256 withAmount = (_amount * ratios[strategy]) / cumulativeRatio;
 
             if (withAmount != 0) {
+                uint256 availableAmount = IStrategy(strategy).getInvestedValue();
+                if (availableAmount < withAmount) {
+                    revert StrategyManager__InsufficientBalance(strategy, availableAmount, withAmount);
+                }
                 actualAmount = IStrategy(strategy).instantWithdraw(withAmount) + actualAmount;
             }
 
@@ -350,7 +352,6 @@ contract StrategyManager {
         uint256 length = _strategies.length;
         for (uint256 i; i < length;) {
             if (IStrategy(_strategies[i]).manager() != address(this)) revert StrategyManager__InvalidManager();
-            // if (_ratios[i] < MINIMUM_ALLOCATION) revert StrategyManager__MinAllocation(MINIMUM_ALLOCATION);
 
             strategies.add(_strategies[i]);
 

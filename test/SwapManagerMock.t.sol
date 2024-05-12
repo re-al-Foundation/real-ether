@@ -80,45 +80,52 @@ contract SwapManagerMockTest is Test {
     function test_RevertPools() public {
         // SwapManager__NoPool
         vm.expectRevert();
-        swapManager.swapUinv3(stETH, 0);
+        swapManager.swapUinv3(stETH, 0, 10);
 
         // SwapManager__NoPool
         vm.expectRevert();
-        swapManager.swapCurve(wstETH, 0);
-
-        // SwapManager__SlippageNotSet
-        vm.expectRevert();
-        swapManager.swapUinv3(wstETH, 0);
-
-        vm.expectRevert();
-        swapManager.swapCurve(stETH, 0);
+        swapManager.swapCurve(wstETH, 0, 10);
 
         swapManager.setTokenSlippage(NULL, 5_00_00); //5%
         swapManager.setTokenSlippage(WETH9, 5_00_00); //5%
 
         // SwapManager__NoLiquidity
         vm.expectRevert();
-        swapManager.swapUinv3(wstETH, 0);
+        swapManager.swapUinv3(wstETH, 0, 0);
 
         vm.expectRevert();
-        swapManager.swapCurve(stETH, 0);
+        swapManager.swapCurve(stETH, 0, 0);
 
+        // stETH pool SwapManager__SlippageExceeded
+        deal(wstETH, address(this), 2 ether);
+        IWStETH(wstETH).unwrap(2 ether);
+        stETH_ETH.setAmountOut(0.94 ether);
+        IERC20(stETH).approve(address(swapManager), 1 ether);
+        vm.expectRevert();
+        swapManager.swapCurve(stETH, 1 ether, 0.98 ether);
+
+        // wstETH pool SwapManager__SlippageExceeded
         deal(wstETH, address(this), 2 ether);
         v3SwapRouter.setAmountOut(0.94 ether);
         IERC20(wstETH).approve(address(swapManager), 1 ether);
         vm.expectRevert();
-        swapManager.swapUinv3(wstETH, 1 ether);
+        swapManager.swapUinv3(wstETH, 1 ether, 0.97 ether);
 
         v3SwapRouter.setAmountOut(0.99 ether);
         IERC20(wstETH).approve(address(swapManager), 1 ether);
-        swapManager.swapUinv3(wstETH, 1 ether);
+        swapManager.swapUinv3(wstETH, 1 ether, 0.9 ether);
         assertEq(address(this).balance, 79228162514264337593543950335);
 
         deal(WETH9, address(swapManager), 1 ether);
         v3SwapRouter.setAmountOut(0.99 ether);
         IERC20(wstETH).approve(address(swapManager), 1 ether);
-        swapManager.swapUinv3(wstETH, 1 ether);
+        swapManager.swapUinv3(wstETH, 1 ether, 0.9 ether);
         assertEq(address(this).balance, 79228162515264337593543950335);
+    }
+
+    function test_RevertMinimumOut() public {
+        vm.expectRevert();
+        swapManager.getMinimumAmount(wstETH, 1 ether);
     }
 
     function test_RevertWhitelistV3Pool() public {
@@ -188,12 +195,6 @@ contract SwapManagerMockTest is Test {
         v3SwapRouter.setAmountOut(0.99 ether);
         lidoStEthStrategy.instantWithdraw(1 ether);
         assertEq(address(this).balance, 79228162514264337593543950335);
-
-        vm.startPrank(address(strategyManager));
-        deal(WETH9, address(swapManager), 0.8 ether);
-        v3SwapRouter.setAmountOut(0.99 ether);
-        vm.expectRevert();
-        lidoStEthStrategy.instantWithdraw(1 ether);
 
         deal(WETH9, address(swapManager), 1 ether);
         deal(address(swapManager), 1 ether);

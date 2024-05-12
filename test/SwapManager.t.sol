@@ -95,7 +95,7 @@ contract SwapManagerTest is Test {
         uint256 balBeforeTx = address(this).balance;
         TransferHelper.safeApprove(stETH, address(swapManager), 1 ether);
 
-        swapManager.swapCurve(stETH, 1 ether);
+        swapManager.swapCurve(stETH, 1 ether, 0.9 ether);
         uint256 balAfterTx = address(this).balance;
 
         console.log(balAfterTx - balBeforeTx);
@@ -111,7 +111,7 @@ contract SwapManagerTest is Test {
         uint256 balBeforeTx = address(this).balance;
         TransferHelper.safeApprove(wstETH, address(swapManager), 1 ether);
 
-        swapManager.swapUinv3(wstETH, 1 ether);
+        swapManager.swapUinv3(wstETH, 1 ether, 0.9 ether);
         uint256 balAfterTx = address(this).balance;
 
         // For context the amount of ETH gotten here is above

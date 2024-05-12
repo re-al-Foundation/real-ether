@@ -8,16 +8,18 @@ pragma solidity =0.8.21;
 interface IRealVault {
     /**
      * @dev Deposits funds into the vault and mints corresponding shares.
+     * @param mintAmountMin The minimum amount of shares minted.
      * @return mintAmount amount of shares minted.
      */
-    function deposit() external payable returns (uint256 mintAmount);
+    function deposit(uint256 mintAmountMin) external payable returns (uint256 mintAmount);
 
     /**
      * @dev Deposits funds into the vault on behalf of a specified receiver and mints corresponding shares.
      * @param receiver The address to receive the minted shares.
+     * @param mintAmountMin The minimum amount of shares minted.
      * @return mintAmount amount of shares minted.
      */
-    function depositFor(address receiver) external payable returns (uint256 mintAmount);
+    function depositFor(address receiver, uint256 mintAmountMin) external payable returns (uint256 mintAmount);
 
     /**
      * @dev Requests withdrawal of a specified amount of shares.
@@ -44,4 +46,11 @@ interface IRealVault {
      * @return price current price per share.
      */
     function currentSharePrice() external view returns (uint256 price);
+
+    /**
+     * @dev Retrieves the share for the given amount.
+     * @param assets mint amount
+     * @param shares shares amount
+     */
+    function previewDeposit(uint256 assets) external view returns (uint256 shares);
 }

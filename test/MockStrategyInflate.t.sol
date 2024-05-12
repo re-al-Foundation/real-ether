@@ -11,6 +11,7 @@ import {TestEthStrategyInflate} from "src/mock/test/TestEthStrategyInflate.sol";
 import {UnderlyingYieldGenerator} from "src/mock/test/UnderlyingYieldGenerator.sol";
 
 contract TestEthStrategyTest is Test {
+    uint256 public constant ZERO_VALUE = 0;
     uint256 PRECISION = 10 ** 18;
 
     Real public real;
@@ -82,11 +83,11 @@ contract TestEthStrategyTest is Test {
         deal(user2.addr, 50 ether);
 
         vm.startPrank(address(user.addr));
-        realVault.deposit{value: 50 ether}();
+        realVault.deposit{value: 50 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.startPrank(address(user2.addr));
-        realVault.deposit{value: 30 ether}();
+        realVault.deposit{value: 30 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         // increment the time to the next round

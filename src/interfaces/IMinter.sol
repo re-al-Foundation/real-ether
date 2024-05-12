@@ -33,6 +33,12 @@ interface IMinter {
     function real() external view returns (address);
 
     /**
+     * @dev Gets the address of the real token vault.
+     * @return The address of the real token vault.
+     */
+    function vault() external view returns (address);
+
+    /**
      * @dev Gets the price of the token.
      * @return price The price of the token.
      */

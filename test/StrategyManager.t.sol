@@ -15,6 +15,7 @@ import {TestEthClaimableStrategy} from "src/mock/TestEthClaimableStrategy.sol";
 contract StrategyManagerTest is Test {
     error OwnableUnauthorizedAccount(address);
 
+    uint256 public constant ZERO_VALUE = 0;
     uint256 PRECISION = 10 ** 18;
     uint256 MIN_SHARES = 1_00;
 
@@ -83,7 +84,7 @@ contract StrategyManagerTest is Test {
     function testShouldPayUserFromStrategyManagerIfStrategyManagerHasEnoughEth() public {
         deal(user.addr, 2 ether);
         vm.startPrank(user.addr);
-        uint256 shares = realVault.deposit{value: 1 ether}();
+        uint256 shares = realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -103,7 +104,9 @@ contract StrategyManagerTest is Test {
     }
 
     function testShouldOnlyRebaseStrategies() public {
-        strategyManager.onlyRebaseStrategies();
+        vm.startPrank(proposal.addr);
+        realVault.onlyRebaseStrategies();
+        vm.stopPrank();
     }
 
     function testShouldFailWhenInAndOutValuesAreNonZero() external {
@@ -117,7 +120,7 @@ contract StrategyManagerTest is Test {
         deal(user.addr, 2 ether);
         vm.startPrank(user.addr);
 
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(epoch0 + realVault.rebaseTimeInterval());
@@ -200,6 +203,15 @@ contract StrategyManagerTest is Test {
         vm.startPrank(address(realVault));
         vm.expectRevert(abi.encodeWithSelector(StrategyManager.StrategyManager__AlreadyExist.selector, address(s1)));
         strategyManager.addStrategy(address(s1));
+        vm.stopPrank();
+    }
+
+    function testShouldFailForceWithdraw() external {
+        vm.startPrank(address(realVault));
+        strategyManager.forceWithdraw(0 ether);
+
+        vm.expectRevert();
+        strategyManager.forceWithdraw(1 ether);
         vm.stopPrank();
     }
 }

@@ -5,6 +5,7 @@ pragma solidity =0.8.21;
 
 import {ReentrancyGuard} from "oz/utils/ReentrancyGuard.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {Ownable2Step} from "oz/access/Ownable2Step.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {IReal} from "./interfaces/IReal.sol";
 import {IMinter} from "./interfaces/IMinter.sol";
@@ -25,7 +26,7 @@ import {ShareMath} from "./libraries/ShareMath.sol";
  * future yield staking /re-staking strategy and optimizations, ensuring its continued effectiveness in
  * managing assets and supporting the Real Network infrastructure.
  */
-contract RealVault is ReentrancyGuard, Ownable {
+contract RealVault is ReentrancyGuard, Ownable2Step {
     uint256 internal constant ONE = 1;
     uint256 internal constant MULTIPLIER = 10 ** 18;
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
@@ -70,7 +71,9 @@ contract RealVault is ReentrancyGuard, Ownable {
     event InitiateWithdraw(address indexed account, uint256 shares, uint256 round);
     event CancelWithdraw(address indexed account, uint256 amount, uint256 round);
     event Withdrawn(address indexed account, uint256 amount, uint256 round);
-    event WithdrawnFromStrategy(address indexed account, uint256 amount, uint256 actualAmount, uint256 round);
+    event WithdrawnFromStrategy(
+        address indexed account, uint256 amount, uint256 actualAmount, uint256 totalAmount, uint256 round
+    );
     event RollToNextRound(uint256 indexed round, uint256 vaultIn, uint256 vaultOut, uint256 sharePrice);
     event VaultMigrated(address indexed oldVault, address newVault);
     event StrategyAdded(address indexed strategy);
@@ -83,8 +86,11 @@ contract RealVault is ReentrancyGuard, Ownable {
     event SetRebaseInterval(uint256 indexed interval);
     event SettleWithdrawDust(uint256 indexed dust);
     event MinWithdrawableSharesUpdated(uint256 indexed minShares);
+    event ProposalUpdated(address indexed oldAddr, address newAddr);
 
     error RealVault__NotReady();
+    error RealVault__Migrated();
+    error RealVault__InsufficientShares();
     error RealVault__InvalidAmount();
     error RealVault__ZeroAddress();
     error RealVault__MininmumWithdraw();
@@ -144,8 +150,8 @@ contract RealVault is ReentrancyGuard, Ownable {
      * @dev Deposit assets into the RealVault.
      * @return mintAmount The amount of shares minted.
      */
-    function deposit() external payable nonReentrant returns (uint256 mintAmount) {
-        mintAmount = _depositFor(msg.sender, msg.sender, msg.value);
+    function deposit(uint256 mintAmountMin) external payable nonReentrant returns (uint256 mintAmount) {
+        mintAmount = _depositFor(msg.sender, msg.sender, msg.value, mintAmountMin);
     }
 
     /**
@@ -153,8 +159,13 @@ contract RealVault is ReentrancyGuard, Ownable {
      * @param receiver Address to receive the minted shares.
      * @return mintAmount The amount of shares minted.
      */
-    function depositFor(address receiver) external payable nonReentrant returns (uint256 mintAmount) {
-        mintAmount = _depositFor(msg.sender, receiver, msg.value);
+    function depositFor(address receiver, uint256 mintAmountMin)
+        external
+        payable
+        nonReentrant
+        returns (uint256 mintAmount)
+    {
+        mintAmount = _depositFor(msg.sender, receiver, msg.value, mintAmountMin);
     }
 
     /**
@@ -306,7 +317,7 @@ contract RealVault is ReentrancyGuard, Ownable {
 
                 actualWithdrawn = actualWithdrawn + actualAmount;
 
-                emit WithdrawnFromStrategy(msg.sender, ethAmount, actualAmount, _latestRoundID);
+                emit WithdrawnFromStrategy(msg.sender, ethAmount, actualAmount, actualWithdrawn, _latestRoundID);
             }
         }
 
@@ -322,6 +333,13 @@ contract RealVault is ReentrancyGuard, Ownable {
         unchecked {
             aVault.withdraw(msg.sender, actualWithdrawn - withFee);
         }
+    }
+
+    /**
+     * @dev Rebalances the strategies without incoming and outgoing amounts.
+     */
+    function onlyRebaseStrategies() external nonReentrant onlyProposal {
+        IStrategyManager(strategyManager).onlyRebaseStrategies();
     }
 
     /**
@@ -445,6 +463,7 @@ contract RealVault is ReentrancyGuard, Ownable {
      */
     function updateProposal(address _proposal) external onlyProposal {
         if (_proposal == address(0)) revert RealVault__ZeroAddress();
+        emit ProposalUpdated(proposal, _proposal);
         proposal = _proposal;
     }
 
@@ -458,10 +477,15 @@ contract RealVault is ReentrancyGuard, Ownable {
     }
 
     // [INTERNAL FUNCTIONS]
-    function _depositFor(address caller, address receiver, uint256 assets) internal returns (uint256 mintAmount) {
+    function _depositFor(address caller, address receiver, uint256 assets, uint256 mintAmountMin)
+        internal
+        returns (uint256 mintAmount)
+    {
         if (assets == 0) revert RealVault__InvalidAmount();
 
         mintAmount = previewDeposit(address(this).balance); // shares amount to be minted
+        if (mintAmount < mintAmountMin) revert RealVault__InsufficientShares();
+
         IAssetsVault(assetsVault).deposit{value: address(this).balance}();
         IMinter(minter).mint(receiver, mintAmount);
         emit Deposit(caller, receiver, assets, mintAmount);
@@ -529,7 +553,7 @@ contract RealVault is ReentrancyGuard, Ownable {
      * - The new interval must not be less than the minimum rebase interval.
      */
     function setRebaseInterval(uint256 _interval) external onlyOwner {
-        if (_interval > MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
+        if (_interval < MINIMUM_REBASE_INTERVAL) revert RealVault__MinimumRebaseInterval(MINIMUM_REBASE_INTERVAL);
         rebaseTimeInterval = _interval;
         emit SetRebaseInterval(rebaseTimeInterval);
     }
@@ -578,7 +602,7 @@ contract RealVault is ReentrancyGuard, Ownable {
     function currentSharePrice() public view returns (uint256 price) {
         IReal realToken = IReal(real);
         uint256 totalReal = realToken.totalSupply();
-        if (latestRoundID == 0 || totalReal == 0 || totalReal == withdrawingSharesInPast) {
+        if (latestRoundID == 0) {
             return MULTIPLIER;
         }
 

@@ -3,6 +3,7 @@ pragma solidity =0.8.21;
 
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {Ownable} from "oz/access/Ownable.sol";
+import {Ownable2Step} from "oz/access/Ownable2Step.sol";
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "oz/utils/math/SafeCast.sol";
@@ -25,21 +26,15 @@ error SwapManager__ExceedPercentage(uint256 given, uint256 max);
 error SwapManager__SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 error SwapManager__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
-contract SwapManager is Ownable {
+contract SwapManager is Ownable2Step {
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
-
-    enum DEX {
-        Uniswap,
-        Curve
-    }
 
     uint256 internal constant ZERO = 0;
     uint256 internal constant ONE = 1;
     uint256 internal constant MIN_DEADLINE = 30; // 30 seconds
     uint32 public constant MIN_TWAP_DURATION = 3_600;
     uint256 internal constant ONE_HUNDRED_PERCENT = 100_0000;
-    uint256 public constant DECIMAL_PRECISION = 10 ** 18;
     uint256 internal constant MAX_SLIPPAGE = 5_00_00; //5%
 
     uint32 public twapDuration;
@@ -74,11 +69,10 @@ contract SwapManager is Ownable {
      * @param amountIn The amount of input tokens.
      * @return amountOut The amount of output tokens.
      */
-    function swapUinv3(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
-        // estimate price using the twap
-        uint128 amountInUint128 = amountIn.toUint128();
-        uint256 quoteOut = estimateV3AmountOut(amountInUint128, tokenIn, WETH9);
-        uint256 amountOutMinimum = getMinimumAmount(WETH9, quoteOut);
+    function swapUinv3(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        public
+        returns (uint256 amountOut)
+    {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
 
         address pool = _getV3Pool(tokenIn);
@@ -101,9 +95,9 @@ contract SwapManager is Ownable {
         );
 
         if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
-        uint256 weth9Balance = IWETH9(WETH9).balanceOf(address(this));
-        if (weth9Balance > 0) IWETH9(WETH9).withdraw(weth9Balance);
 
+        // After the swap, the balance of WETH9 will always remain greater than 0
+        IWETH9(WETH9).withdraw(IWETH9(WETH9).balanceOf(address(this)));
         amountOut = address(this).balance;
         TransferHelper.safeTransferETH(msg.sender, amountOut);
     }
@@ -114,20 +108,20 @@ contract SwapManager is Ownable {
      * @param amountIn The amount of input tokens.
      * @return amountOut The amount of output tokens.
      */
-    function swapCurve(address tokenIn, uint256 amountIn) public returns (uint256 amountOut) {
-        address pool = _getCurvePool(tokenIn);
-        (address token0, address token1) = _getCurvPoolTokens(pool);
-        address tokenOut = token0 == tokenIn ? token1 : token0;
-
-        uint256 quoteOut = estimateCurveAmountOut(amountIn, tokenIn);
-        uint256 amountOutMinimum = getMinimumAmount(tokenOut, quoteOut);
+    function swapCurve(address tokenIn, uint256 amountIn, uint256 amountOutMinimum)
+        public
+        returns (uint256 amountOut)
+    {
         if (amountOutMinimum == 0) revert SwapManager__NoLiquidity();
+        address pool = _getCurvePool(tokenIn);
 
         TransferHelper.safeTransferFrom(tokenIn, msg.sender, address(this), amountIn);
         IERC20(tokenIn).forceApprove(pool, amountIn);
 
         (int128 _inIdx, int128 _outIdx) = _getCurveTokenIndex(pool, tokenIn);
         amountOut = ICurvePool(pool).exchange(_inIdx, _outIdx, amountIn, amountOutMinimum);
+
+        if (amountOut < amountOutMinimum) revert SwapManager__SlippageExceeded(amountOut, amountOutMinimum);
 
         amountOut = address(this).balance;
         TransferHelper.safeTransferETH(msg.sender, amountOut);

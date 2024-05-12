@@ -40,6 +40,7 @@ contract LidoStrategyTest is Test {
     error Strategy__InsufficientBalance();
     error Strategy__ZeroPoolLiquidity();
 
+    uint256 public constant ZERO_VALUE = 0;
     uint256 PRECISION = 10 ** 18;
 
     Real public real;
@@ -136,7 +137,7 @@ contract LidoStrategyTest is Test {
         deal(deadShares.addr, 1 ether);
         vm.startPrank(deadShares.addr);
 
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.startPrank(address(0xdead));
@@ -177,17 +178,17 @@ contract LidoStrategyTest is Test {
 
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
-        realVault.deposit{value: 10 ether}();
+        realVault.deposit{value: 10 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         deal(deployer.addr, 10 ether);
         vm.startPrank(deployer.addr);
-        realVault.deposit{value: 10 ether}();
+        realVault.deposit{value: 10 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         deal(user2.addr, 10 ether);
         vm.startPrank(user2.addr);
-        realVault.deposit{value: 10 ether}();
+        realVault.deposit{value: 10 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         // increment the time to the next round
@@ -220,7 +221,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1 ether);
         vm.startPrank(user.addr);
 
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         assertEq(IStETH(stETHAdress).balanceOf(address(lidoStEthStrategy)), 0);
@@ -234,7 +235,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 1 ether}();
+        uint256 shares = realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -264,7 +265,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 1 ether}();
+        uint256 shares = realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -405,7 +406,7 @@ contract LidoStrategyTest is Test {
         deal(user2.addr, 2 ether);
         vm.startPrank(user2.addr);
         // deposit in Round#1 by user1 at 0.909090 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         // increment the time to the next round
@@ -455,7 +456,7 @@ contract LidoStrategyTest is Test {
 
         vm.startPrank(user2.addr);
         // deposit in Round#1 by user1 at 0.909090 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         assertApproxEqAbs(real.balanceOf(user2.addr), 909090909090909090, 1); //0.9090
@@ -507,7 +508,7 @@ contract LidoStrategyTest is Test {
 
         vm.startPrank(user2.addr);
         // deposit in Round#1 by user1 at 0.909090 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         // increment the time to the next round
@@ -541,7 +542,7 @@ contract LidoStrategyTest is Test {
         deal(user2.addr, 2 ether);
         vm.startPrank(user2.addr);
         // deposit in Round#1 by user1 at 0.909090 pps
-        realVault.deposit{value: 1 ether}();
+        realVault.deposit{value: 1 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         // increment the time to the next round
@@ -552,7 +553,7 @@ contract LidoStrategyTest is Test {
         assertEq(address(assetsVault).balance, 0 ether);
 
         vm.startPrank(address(realVault));
-        strategyManager.forceWithdraw(2 ether);
+        strategyManager.forceWithdraw(1999999999999999999);
         vm.stopPrank();
 
         // 0.001259297158 deducted as swap fees
@@ -563,7 +564,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 10 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 10 ether}();
+        uint256 shares = realVault.deposit{value: 10 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -612,7 +613,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 2_000 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 2_000 ether}();
+        uint256 shares = realVault.deposit{value: 2_000 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -695,7 +696,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1_000_000 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 1_00_00 ether}();
+        uint256 shares = realVault.deposit{value: 1_00_00 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -746,7 +747,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1_000_000 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 1_00_00 ether}();
+        uint256 shares = realVault.deposit{value: 1_00_00 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
@@ -812,7 +813,7 @@ contract LidoStrategyTest is Test {
         deal(user.addr, 1_000_000 ether);
         vm.startPrank(user.addr);
 
-        uint256 shares = realVault.deposit{value: 1_00_00 ether}();
+        uint256 shares = realVault.deposit{value: 1_00_00 ether}(ZERO_VALUE);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);

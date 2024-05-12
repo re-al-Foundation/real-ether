@@ -11,15 +11,11 @@ import {IStrategyManager} from "../interfaces/IStrategyManager.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {IWithdrawalQueueERC721} from "../interfaces/IWithdrawalQueueERC721.sol";
 
-error Strategy__StETHWrap();
 error Strategy__ZeroAmount();
 error Strategy__LidoDeposit();
 error Strategy__ZeroAddress();
 error Strategy__ZeroPoolLiquidity();
-error Strategy__LidoSharesTransfer();
-error Strategy__LidoRequestWithdraw();
 error Strategy__InsufficientBalance();
-error Strategy__TooLittleRecieved(uint256 amountOut, uint256 minAmountOut);
 
 /**
  * @title LidoStEthStrategy
@@ -103,22 +99,17 @@ contract LidoStEthStrategy is Strategy {
         address tokenIn;
 
         if (v3Out > curveOut) {
+            tokenIn = WSTETH;
             // wrap stETH for uniswap pool
             TransferHelper.safeApprove(address(STETH), WSTETH, _amountIn);
             _amountIn = IWStETH(WSTETH).wrap(_amountIn);
-
-            tokenIn = WSTETH;
-
             TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
-            actualAmount = ISwapManager(swapManager).swapUinv3(tokenIn, _amountIn);
+            actualAmount = ISwapManager(swapManager).swapUinv3(tokenIn, _amountIn, quoteAmountMin);
         } else {
             tokenIn = address(STETH);
             TransferHelper.safeApprove(tokenIn, swapManager, _amountIn);
-            actualAmount = ISwapManager(swapManager).swapCurve(tokenIn, _amountIn);
+            actualAmount = ISwapManager(swapManager).swapCurve(tokenIn, _amountIn, quoteAmountMin);
         }
-
-        // check recieved amount out using fairQuoteMin
-        if (actualAmount < quoteAmountMin) revert Strategy__TooLittleRecieved(actualAmount, quoteAmountMin);
     }
 
     function _checkPendingAssets(uint256[] memory requestIds)
