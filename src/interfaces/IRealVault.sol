@@ -53,4 +53,6 @@ interface IRealVault {
      * @param shares shares amount
      */
     function previewDeposit(uint256 assets) external view returns (uint256 shares);
+
+    function migrateVault(address _vault) external;
 }
