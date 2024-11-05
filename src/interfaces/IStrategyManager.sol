@@ -79,4 +79,6 @@ interface IStrategyManager {
      * @return amount The total pending value managed by all strategies.
      */
     function getAllStrategyPendingValue() external view returns (uint256 amount);
+
+    function getStrategies() external view returns (address[] memory addrs, uint256[] memory allocations);
 }

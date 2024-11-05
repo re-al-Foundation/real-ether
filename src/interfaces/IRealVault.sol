@@ -55,4 +55,8 @@ interface IRealVault {
     function previewDeposit(uint256 assets) external view returns (uint256 shares);
 
     function migrateVault(address _vault) external;
+   
+    function updateInvestmentPortfolio(address[] memory _strategies, uint256[] memory _ratios) external;
+
+    function rollToNextRound() external;
 }
