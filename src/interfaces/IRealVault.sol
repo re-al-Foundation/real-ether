@@ -53,4 +53,8 @@ interface IRealVault {
      * @param shares shares amount
      */
     function previewDeposit(uint256 assets) external view returns (uint256 shares);
+
+    function updateInvestmentPortfolio(address[] memory _strategies, uint256[] memory _ratios) external;
+
+    function rollToNextRound() external;
 }

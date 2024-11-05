@@ -346,7 +346,7 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
      * @dev Transition to the next round, managing vault balances and share prices.
      */
     function rollToNextRound() external nonReentrant {
-        if (block.timestamp < rebaseTime + rebaseTimeInterval) revert RealVault__NotReady();
+        // if (block.timestamp < rebaseTime + rebaseTimeInterval) revert RealVault__NotReady();
         rebaseTime = block.timestamp;
 
         IStrategyManager manager = IStrategyManager(strategyManager);
@@ -627,6 +627,12 @@ contract RealVault is ReentrancyGuard, Ownable2Step {
         }
 
         investedAmount = IStrategyManager(strategyManager).getTotalInvestedValue();
+    }
+
+    function migrateOldAssetVault(address _oldAssetVault) external onlyOwner {
+        if (_oldAssetVault.balance == 0) revert RealVault__ExceedBalance();
+        IAssetsVault(_oldAssetVault).withdraw(address(this), _oldAssetVault.balance);
+        IAssetsVault(assetsVault).deposit{value: address(this).balance}();
     }
 
     receive() external payable {}
