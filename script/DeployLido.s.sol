@@ -11,6 +11,7 @@ import {LidoStEthStrategy} from "src/strategy/LidoStEthStrategy.sol";
 import {SwapManager} from "src/utils/SwapManager.sol";
 import {IMinter} from "src/interfaces/IMinter.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {IRealVault} from "src/interfaces/IRealVault.sol";
 
 contract DeployLidoScript is Script {
     address realVaultAddress;
@@ -24,20 +25,24 @@ contract DeployLidoScript is Script {
     LidoStEthStrategy lidoStrategy;
     SwapManager swapManager;
 
-    address realAddress = 0x0C68a3C11FB3550e50a4ed8403e873D367A8E361;
-    address minterAddress = 0x6254c71Eae8476BE8fd0B9F14AEB61d578422991;
+    address realAddress = 0xC0Cc5eA00cAe0894B441E3B5a3Bb57aa92F15421;
+    address minterAddress = 0x655756824385F8903AC8cFDa17B656cc26f7C7da;
+    address oldVaultAddress = 0xA5E77aDCdC2F1c55e7894A4021763B4D63C54638;
+
+    address admin = 0xeB658c4Ea908aC4dAF9c309D8f883d6aD758b3A3;
+    address proposal = 0xeB658c4Ea908aC4dAF9c309D8f883d6aD758b3A3;
 
     /// @dev  addresses
-    address stETHAdress = 0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034;
-    address wstETHAdress = 0x8d09a4502Cc8Cf1547aD300E066060D043f6982D;
-    address stETHWithdrawal = 0xc7cc160b58F8Bb0baC94b80847E2CF2800565C50;
-    address WETH9 = 0x6B5817E7091BC0C747741E96820b0199388245EA;
+    address stETHAdress = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+    address wstETHAdress = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    address stETHWithdrawal = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
+    address WETH9 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    address v3SwapRouter = 0x0a42599e0840aa292C76620dC6d4DAfF23DB5236;
+    address v3SwapRouter = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address NULL = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    address wstETHV3Pool = 0x746ac36c280E9b1c9b61B73daE3E8433C90cA013;
-    address stETHCurvePool = 0xE6B65B8282807422ff0E31fD914457C4BE4Fa7Ef;
+    address wstETHV3Pool = 0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa;
+    address stETHCurvePool = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
 
     function setUp() public {}
 
@@ -55,13 +60,16 @@ contract DeployLidoScript is Script {
         strategyManagerAddress = vm.computeCreateAddress(_deployer, n + 4);
 
         _createVaultAndStrategy();
+        _setPoolWhiteList();
         _matchPrecompute();
         _migrateVault();
+
+        vm.stopBroadcast();
     }
 
     function _createVaultAndStrategy() internal {
         realVault = new RealVault(
-            _deployer, minterAddress, payable(assetVaultAddress), payable(strategyManagerAddress), address(_deployer)
+            admin, minterAddress, payable(assetVaultAddress), payable(strategyManagerAddress), address(proposal)
         ); // nonce
 
         assetsVault = new AssetsVault(address(realVault), strategyManagerAddress); // nonce + 1
@@ -69,7 +77,7 @@ contract DeployLidoScript is Script {
         address[] memory strategies = new address[](1);
         uint256[] memory ratios = new uint256[](1);
 
-        swapManager = new SwapManager(_deployer, WETH9, NULL, v3SwapRouter); // nonce + 2
+        swapManager = new SwapManager(admin, WETH9, NULL, v3SwapRouter); // nonce + 2
         lidoStrategy = new LidoStEthStrategy(
             stETHAdress,
             stETHWithdrawal,
@@ -92,24 +100,30 @@ contract DeployLidoScript is Script {
     }
 
     function _migrateVault() internal {
-        RealVault oldVault = RealVault(payable(0x0C8a308f05dBdFc29268fC599ad6CA56d2B27A39));
-        address oldAVault = 0x2884c41ef12a2967e3E182294754e7239eC30316;
+        uint256 BalanceBefore = oldVaultAddress.balance;
+        IRealVault(oldVaultAddress).migrateVault(address(realVault));
 
-        oldVault.migrateVault(address(realVault));
-
-        require(IMinter(0x6254c71Eae8476BE8fd0B9F14AEB61d578422991).vault() == address(realVault), "!realVault");
+        require(IMinter(minterAddress).vault() == address(realVault), "!realVault");
         require(assetsVault.realVault() == address(realVault), "!realVault");
         require(assetsVault.strategyManager() == address(strategyManager), "!strategyManager");
         require(address(assetsVault) == strategyManager.assetsVault(), "!assetsVault");
-
-        uint256 BalanceBefore = address(oldAVault).balance;
-        // migrate asset to new asset Vault
-        realVault.migrateOldAssetVault(oldAVault);
         require(BalanceBefore == address(assetsVault).balance, "!balance");
 
-        realVault.setRebaseInterval(36_00);
+        console.log("Balance", oldVaultAddress.balance, address(assetsVault).balance);
+        console.log("Vault", IMinter(minterAddress).vault(), assetsVault.realVault(), strategyManager.realVault());
+        console.log("AssetVault", realVault.assetsVault(), strategyManager.assetsVault());
+        console.log("strategyManager", realVault.strategyManager(), assetsVault.strategyManager());
+        console.log("Owner", realVault.owner(), realVault.proposal(), swapManager.owner());
 
-        vm.stopBroadcast();
+        // realVault.deposit{value: 0.1 ether}(0);
+        // realVault.rollToNextRound();
+        // realVault.instantWithdraw(0, 0.1 ether);
+    }
+
+    function _setPoolWhiteList() internal {
+        swapManager.setWhitelistV3Pool(wstETHAdress, wstETHV3Pool, 0);
+        swapManager.setWhitelistCurvePool(stETHAdress, stETHCurvePool, 0); 
+        swapManager.setTokenSlippage(WETH9, 1_00_00); // 1% slippage
     }
 
     function test() public {}
